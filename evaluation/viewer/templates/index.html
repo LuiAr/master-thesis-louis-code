@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evaluation Viewer : Lawn Mower Robot</title>
+  <style>
+    /* -- reset & base --------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f7fafc; color: #1a202c; min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+
+    /* -- layout --------------------------------------------- */
+    #app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 56px 1fr; height: 100vh; }
+
+    header {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 20px;
+      background: #ffffff;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; color: #2b6cb0; }
+    header .subtitle { font-size: 12px; color: #718096; }
+
+    /* -- sidebar -------------------------------------------- */
+    #sidebar {
+      background: #ffffff;
+      border-right: 1px solid #e2e8f0;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    #sidebar h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #718096; padding: 14px 16px 8px; }
+    #run-list { overflow-y: auto; flex: 1; }
+    .run-item {
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #edf2f7;
+      transition: background 0.1s;
+    }
+    .run-item:hover { background: #f7fafc; }
+    .run-item.active { background: #ebf8ff; border-left: 3px solid #3182ce; }
+    .run-item .run-name { font-size: 12px; font-weight: 600; color: #2d3748; word-break: break-all; }
+    .run-item .run-meta { font-size: 11px; color: #718096; margin-top: 2px; }
+    .badge {
+      display: inline-block;
+      font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .badge-seg { background: #bee3f8; color: #2b6cb0; }
+    .badge-vlm { background: #e9d8fd; color: #553c9a; }
+
+    /* -- main panel ----------------------------------------- */
+    #main {
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* -- toolbar -------------------------------------------- */
+    #toolbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 16px;
+      background: #ffffff;
+      border-bottom: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+    #toolbar select, #toolbar input[type=range], #toolbar input[type=number] { background: #ffffff; color: #2d3748; border: 1px solid #cbd5e0; border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+    #toolbar label { font-size: 11px; color: #4a5568; }
+    .toolbar-sep { width: 1px; height: 20px; background: #e2e8f0; }
+    #frame-counter { font-size: 12px; color: #718096; min-width: 120px; }
+    .btn {
+      background: #edf2f7; border: 1px solid #cbd5e0; color: #2d3748; padding: 4px 11px;
+      border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .btn:hover { background: #e2e8f0; border-color: #a0aec0; }
+    .btn:disabled { opacity: 0.5; cursor: default; background: #f7fafc; border-color: #e2e8f0; color: #a0aec0; }
+    .btn-nav { padding: 4px 9px; font-size: 14px; }
+
+    /* -- content -------------------------------------------- */
+    #content {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* -- image panel ---------------------------------------- */
+    #image-panel {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: #edf2f7;
+      padding: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+    #image-panel img {
+      max-width: 100%; max-height: 100%;
+      border-radius: 4px;
+      object-fit: contain;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    #img-toggle {
+      position: absolute; bottom: 12px; right: 12px;
+      background: rgba(255,255,255,0.9);
+      border: 1px solid #cbd5e0;
+      color: #2d3748; font-size: 11px; font-weight: 600;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    #img-toggle:hover { background: #ffffff; border-color: #a0aec0; }
+    #no-run-msg {
+      text-align: center; color: #718096;
+    }
+    #no-run-msg h2 { font-size: 18px; margin-bottom: 8px; color: #4a5568; }
+    #no-run-msg p { font-size: 13px; }
+
+    /* -- detail panel --------------------------------------- */
+    #detail-panel {
+      background: #ffffff;
+      border-left: 1px solid #e2e8f0;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .detail-section h3 {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #a0aec0; margin-bottom: 8px;
+    }
+    .kv-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+    .kv-grid dt { font-size: 11px; color: #718096; white-space: nowrap; }
+    .kv-grid dd { font-size: 12px; color: #2d3748; word-break: break-word; font-weight: 500; }
+
+    .obstacle-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 12px;
+      font-size: 12px; font-weight: 700;
+    }
+    .obstacle-yes { background: #fed7d7; color: #c53030; }
+    .obstacle-ctx { background: #feebc8; color: #c05621; }
+    .obstacle-no  { background: #c6f6d5; color: #2f855a; }
+
+    .action-pill {
+      display: inline-block; padding: 3px 10px; border-radius: 4px;
+      font-size: 13px; font-weight: 800; letter-spacing: 0.05em;
+    }
+    .action-STOP        { background: #fed7d7; color: #c53030; }
+    .action-CONTINUE    { background: #c6f6d5; color: #2f855a; }
+    .action-TURN_LEFT   { background: #feebc8; color: #c05621; }
+    .action-TURN_RIGHT  { background: #feebc8; color: #c05621; }
+
+    .pixel-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .pixel-bar-label { font-size: 11px; color: #4a5568; min-width: 80px; font-weight: 500; }
+    .pixel-bar-track { flex: 1; height: 6px; background: #edf2f7; border-radius: 3px; overflow: hidden; }
+    .pixel-bar-fill { height: 100%; background: #4299e1; border-radius: 3px; }
+    .pixel-bar-pct { font-size: 10px; color: #718096; min-width: 36px; text-align: right; }
+
+    .vlm-description {
+      font-size: 12px; line-height: 1.6; color: #2d3748;
+      background: #f7fafc; padding: 10px; border-radius: 6px; border: 1px solid #edf2f7;
+    }
+    .vlm-reasoning { font-size: 11px; color: #718096; font-style: italic; }
+
+    /* -- filmstrip ------------------------------------------ */
+    #filmstrip-wrap {
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+      flex-shrink: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+      padding: 8px 10px;
+      display: none;
+      grid-column: 1 / -1;
+    }
+    #filmstrip-wrap.visible { display: block; }
+    .strip-frame {
+      display: inline-block;
+      width: 64px; height: 36px;
+      margin-right: 6px;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      vertical-align: middle;
+      position: relative;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .strip-frame img { width: 100%; height: 100%; object-fit: cover; }
+    .strip-frame.active { border-color: #3182ce; box-shadow: 0 0 0 1px #3182ce; }
+    .strip-frame.has-obstacle::after {
+      content: '';
+      position: absolute; top: 2px; right: 2px;
+      width: 8px; height: 8px;
+      background: #e53e3e;
+      border: 1px solid #fff;
+      border-radius: 50%;
+    }
+    .strip-frame.has-context::after {
+      content: '';
+      position: absolute; top: 2px; right: 2px;
+      width: 8px; height: 8px;
+      background: #dd6b20;
+      border: 1px solid #fff;
+      border-radius: 50%;
+    }
+    .strip-frame.has-vlm::after {
+      background: #805ad5;
+      border: 1px solid #fff;
+    }
+
+    /* -- stats bar ------------------------------------------ */
+    #stats-bar {
+      display: flex; gap: 20px;
+      padding: 8px 16px;
+      background: #f7fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px; color: #718096;
+      flex-shrink: 0;
+    }
+    #stats-bar span b { color: #2b6cb0; }
+
+    /* -- empty states --------------------------------------- */
+    .empty { color: #a0aec0; font-size: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3182ce" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+    <div>
+      <h1>Evaluation Viewer</h1>
+      <div class="subtitle">Autonomous Lawn Mower Robot — Vision Pipeline</div>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h2>Runs</h2>
+    <div id="run-list"><p class="empty" style="padding:16px">Loading runs…</p></div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="toolbar">
+      <button class="btn btn-nav" id="btn-prev" disabled>&#8592;</button>
+      <button class="btn btn-nav" id="btn-next" disabled>&#8594;</button>
+      <span id="frame-counter">—</span>
+      <div class="toolbar-sep"></div>
+      <label>Filter
+        <select id="filter-select" disabled>
+          <option value="all">All frames</option>
+          <option value="obstacle">Obstacle only</option>
+          <option value="vlm">VLM triggered</option>
+        </select>
+      </label>
+      <div class="toolbar-sep"></div>
+      <label><input type="checkbox" id="chk-filmstrip" /> Filmstrip</label>
+      <div class="toolbar-sep"></div>
+      <label>Jump to
+        <input type="number" id="jump-input" min="0" style="width:70px;margin-left:4px" disabled />
+      </label>
+      <button class="btn" id="btn-jump" disabled>Go</button>
+    </div>
+
+    <div id="content">
+      <div id="image-panel">
+        <div id="no-run-msg">
+          <h2>No run selected</h2>
+          <p>Pick a run from the sidebar to start reviewing frames.</p>
+        </div>
+        <img id="main-img" style="display:none" alt="frame" />
+        <button id="img-toggle" style="display:none">Show original</button>
+      </div>
+
+      <div id="detail-panel">
+        <div id="detail-placeholder" class="empty">Select a run and navigate to a frame.</div>
+      </div>
+    </div>
+
+    <div id="filmstrip-wrap" id="filmstrip-wrap">
+      <div id="filmstrip"></div>
+    </div>
+
+    <div id="stats-bar">
+      <span>Frames: <b id="stat-total">—</b></span>
+      <span>With obstacles: <b id="stat-obstacles">—</b></span>
+      <span>Obstacle rate: <b id="stat-rate">—</b></span>
+      <span>VLM calls: <b id="stat-vlm">—</b></span>
+      <span id="stat-avg-vlm" style="display:none">Avg VLM time: <b id="stat-vlm-time">—</b></span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* -- state ------------------------------------------------- */
+let state = {
+  runs: [],
+  currentRun: null,
+  frames: [],
+  filteredFrames: [],
+  currentIdx: 0,
+  showAnnotated: true,
+  runMeta: null,
+};
+
+/* -- init -------------------------------------------------- */
+async function init() {
+  await loadRuns();
+  document.getElementById('btn-prev').addEventListener('click', () => navigate(-1));
+  document.getElementById('btn-next').addEventListener('click', () => navigate(1));
+  document.getElementById('filter-select').addEventListener('change', applyFilter);
+  document.getElementById('chk-filmstrip').addEventListener('change', toggleFilmstrip);
+  document.getElementById('img-toggle').addEventListener('click', toggleImage);
+  document.getElementById('btn-jump').addEventListener('click', jumpToFrame);
+  document.getElementById('jump-input').addEventListener('keydown', e => { if (e.key === 'Enter') jumpToFrame(); });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft')  navigate(-1);
+    if (e.key === 'ArrowRight') navigate(1);
+  });
+}
+
+/* -- runs -------------------------------------------------- */
+async function loadRuns() {
+  const resp = await fetch('/api/runs');
+  state.runs = await resp.json();
+  renderRunList();
+}
+
+function renderRunList() {
+  const el = document.getElementById('run-list');
+  if (!state.runs.length) {
+    el.innerHTML = '<p class="empty" style="padding:16px">No runs found. Run a pipeline first.</p>';
+    return;
+  }
+  el.innerHTML = state.runs.map(r => `
+    <div class="run-item ${state.currentRun === r.name ? 'active' : ''}" onclick="selectRun('${r.name}')">
+      <div class="run-name">${r.name}</div>
+      <div class="run-meta">
+        <span class="badge ${r.setup === 'seg_vlm' ? 'badge-vlm' : 'badge-seg'}">${r.setup === 'seg_vlm' ? 'SEG+VLM' : 'SEG only'}</span>
+        &nbsp;${r.video || ''}
+      </div>
+      <div class="run-meta">${r.frames_processed} frames · ${(r.obstacle_rate * 100).toFixed(1)}% obstacles</div>
+    </div>
+  `).join('');
+}
+
+async function selectRun(name) {
+  state.currentRun = name;
+  state.currentIdx = 0;
+  renderRunList();
+
+  const [framesResp, metaResp] = await Promise.all([
+    fetch(`/api/runs/${name}/frames`),
+    fetch(`/api/runs/${name}/config`),
+  ]);
+  state.frames = await framesResp.json();
+  state.runMeta = await metaResp.json();
+
+  applyFilter();
+  updateStats();
+  enableControls();
+  renderFilmstrip();
+  showFrame(0);
+}
+
+/* -- filter ------------------------------------------------ */
+function applyFilter() {
+  const val = document.getElementById('filter-select').value;
+  if (val === 'obstacle') {
+    state.filteredFrames = state.frames.filter(f => f.danger_detected || f.context_detected);
+  } else if (val === 'vlm') {
+    state.filteredFrames = state.frames.filter(f => f.vlm);
+  } else {
+    state.filteredFrames = [...state.frames];
+  }
+  state.currentIdx = 0;
+  renderFilmstrip();
+  showFrame(0);
+}
+
+/* -- navigation -------------------------------------------- */
+function navigate(delta) {
+  const newIdx = state.currentIdx + delta;
+  if (newIdx < 0 || newIdx >= state.filteredFrames.length) return;
+  showFrame(newIdx);
+}
+
+function jumpToFrame() {
+  const val = parseInt(document.getElementById('jump-input').value, 10);
+  if (isNaN(val)) return;
+  const idx = state.filteredFrames.findIndex(f => f.frame_index === val);
+  if (idx >= 0) showFrame(idx);
+  else alert(`Frame ${val} not found in current filter.`);
+}
+
+function showFrame(idx) {
+  if (!state.filteredFrames.length) return;
+  idx = Math.max(0, Math.min(idx, state.filteredFrames.length - 1));
+  state.currentIdx = idx;
+
+  const frame = state.filteredFrames[idx];
+  const run = state.currentRun;
+  const kind = (state.showAnnotated && frame.has_annotated) ? 'annotated' : 'original';
+  const imgEl = document.getElementById('main-img');
+  const noMsg = document.getElementById('no-run-msg');
+
+  imgEl.src = `/api/runs/${run}/image/${frame.frame_index}/${kind}`;
+  imgEl.style.display = 'block';
+  noMsg.style.display = 'none';
+  document.getElementById('img-toggle').style.display = 'block';
+  document.getElementById('img-toggle').textContent = state.showAnnotated ? 'Show original' : 'Show annotated';
+
+  const total = state.filteredFrames.length;
+  document.getElementById('frame-counter').textContent =
+    `Frame ${frame.frame_index}  (${idx + 1} / ${total})  · ${frame.video_timestamp_s.toFixed(2)}s`;
+
+  document.getElementById('btn-prev').disabled = idx <= 0;
+  document.getElementById('btn-next').disabled = idx >= total - 1;
+
+  renderDetail(frame);
+  updateFilmstripActive(idx);
+}
+
+/* -- detail panel ------------------------------------------ */
+function renderDetail(frame) {
+  const el = document.getElementById('detail-panel');
+  let html = '';
+
+  const dangerDetected = frame.danger_detected;
+  const contextDetected = frame.context_detected;
+  const anyObstacle = dangerDetected || contextDetected;
+  const statusClass = dangerDetected ? 'obstacle-yes' : contextDetected ? 'obstacle-ctx' : 'obstacle-no';
+  const statusText = dangerDetected ? 'DANGER ZONE' : contextDetected ? 'CONTEXT ZONE' : 'CLEAR';
+  const blurTag = frame.blurry ? ` <span style="font-size:10px;color:#c05621;background:#feebc8;padding:1px 6px;border-radius:3px;margin-left:6px">BLURRY</span>` : '';
+
+  html += `
+    <div class="detail-section">
+      <h3>Frame info</h3>
+      <dl class="kv-grid">
+        <dt>Index</dt><dd>${frame.frame_index}</dd>
+        <dt>Timestamp</dt><dd>${frame.video_timestamp_s.toFixed(3)} s</dd>
+        <dt>Status</dt><dd><span class="obstacle-badge ${statusClass}">${statusText}</span>${blurTag}</dd>
+        <dt>Seg time</dt><dd>${frame.seg_time_s != null ? frame.seg_time_s.toFixed(3) + ' s' : '—'}</dd>
+        <dt>Laplacian var</dt><dd>${frame.laplacian_variance != null ? frame.laplacian_variance : '—'}</dd>
+      </dl>
+    </div>`;
+
+  const detections = frame.detections || {};
+  const detEntries = Object.entries(detections);
+  html += `<div class="detail-section"><h3>Detections</h3>`;
+  if (detEntries.length === 0) {
+    html += `<p class="empty">No obstacle classes above threshold.</p>`;
+  } else {
+    detEntries.sort((a, b) => b[1].fraction - a[1].fraction).forEach(([label, info]) => {
+      const frac = info.fraction;
+      const pct = (frac * 100).toFixed(2);
+      const barWidth = Math.min(frac * 100 * 5, 100).toFixed(1);
+      const zoneColour = info.zone === 'danger' ? '#c53030' : '#c05621';
+      const zoneLabel = {'danger': 'DANGER', 'context_left': 'CTX-L', 'context_right': 'CTX-R'}[info.zone] || info.zone;
+      const barColour = info.zone === 'danger' ? '#fc8181' : '#f6ad55';
+      html += `
+        <div class="pixel-bar" style="align-items:flex-start;flex-direction:column;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <span style="font-size:11px;font-weight:600;color:#2d3748">${label}</span>
+            <span style="font-size:10px;font-weight:700;color:${zoneColour};background:${zoneColour}22;padding:1px 5px;border-radius:3px">${zoneLabel}</span>
+            <span style="font-size:10px;color:#718096">${pct}%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;width:100%">
+            <div class="pixel-bar-track" style="flex:1"><div class="pixel-bar-fill" style="width:${barWidth}%;background:${barColour}"></div></div>
+          </div>
+        </div>`;
+    });
+  }
+  html += `</div>`;
+
+  const classes = (frame.classes_present || []).join(', ') || '—';
+  html += `
+    <div class="detail-section">
+      <h3>All classes present</h3>
+      <p style="font-size:11px;color:#718096">${classes}</p>
+    </div>`;
+
+  if (frame.vlm) {
+    const v = frame.vlm;
+    const actionCls = `action-${v.action}`;
+    const zoneTag = v.trigger_zone ? `<span style="font-size:10px;color:#553c9a;background:#e9d8fd;padding:1px 6px;border-radius:3px;margin-left:6px">${v.trigger_zone}</span>` : '';
+    html += `
+      <div class="detail-section">
+        <h3>VLM response${zoneTag}</h3>
+        <dl class="kv-grid" style="margin-bottom:10px">
+          <dt>Action</dt><dd><span class="action-pill ${actionCls}">${v.action}</span></dd>
+          <dt>Obstacle</dt><dd>${v.obstacle_type || '—'}</dd>
+          <dt>Movement</dt><dd>${v.movement || '—'}${v.if_moving ? ' → ' + v.if_moving : ''}</dd>
+          ${v.orientation ? `<dt>Orientation</dt><dd>${v.orientation}</dd>` : ''}
+          ${v.threat ? `<dt>Threat</dt><dd>${v.threat}</dd>` : ''}
+          <dt>Confidence</dt><dd>${v.confidence || '—'}</dd>
+          <dt>VLM time</dt><dd>${v.vlm_time_s != null ? v.vlm_time_s.toFixed(2) + ' s' : '—'}</dd>
+        </dl>
+        <div class="vlm-description">${v.description || '—'}</div>
+        ${v.reasoning ? `<p class="vlm-reasoning" style="margin-top:8px">${v.reasoning}</p>` : ''}
+      </div>`;
+  } else if (state.runMeta && state.runMeta.meta.setup === 'seg_vlm') {
+    const skipMsg = frame.blurry && anyObstacle ? 'Skipped — frame too blurry.' : 'VLM not triggered for this frame.';
+    html += `<div class="detail-section"><h3>VLM response</h3><p class="empty">${skipMsg}</p></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+/* -- filmstrip ---------------------------------------------- */
+function renderFilmstrip() {
+  const strip = document.getElementById('filmstrip');
+  strip.innerHTML = state.filteredFrames.map((f, i) => {
+    const hasObstacle = f.danger_detected ? 'has-obstacle' : f.context_detected ? 'has-context' : '';
+    const hasVlm = f.vlm ? 'has-vlm' : '';
+    return `
+      <div class="strip-frame ${hasObstacle} ${hasVlm}" data-idx="${i}" onclick="showFrame(${i})">
+        <img src="/api/runs/${state.currentRun}/image/${f.frame_index}/original"
+             loading="lazy" alt="" />
+      </div>`;
+  }).join('');
+}
+
+function updateFilmstripActive(idx) {
+  document.querySelectorAll('.strip-frame').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  const active = document.querySelector('.strip-frame.active');
+  if (active) active.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+
+function toggleFilmstrip() {
+  document.getElementById('filmstrip-wrap').classList.toggle(
+    'visible', document.getElementById('chk-filmstrip').checked
+  );
+}
+
+/* -- image toggle ------------------------------------------ */
+function toggleImage() {
+  state.showAnnotated = !state.showAnnotated;
+  showFrame(state.currentIdx);
+}
+
+/* -- stats ------------------------------------------------- */
+function updateStats() {
+  const s = state.runMeta ? state.runMeta.summary : {};
+  document.getElementById('stat-total').textContent = s.frames_processed ?? '—';
+  document.getElementById('stat-obstacles').textContent = s.frames_with_obstacles ?? '—';
+  document.getElementById('stat-rate').textContent = s.obstacle_rate != null ? (s.obstacle_rate * 100).toFixed(1) + '%' : '—';
+  document.getElementById('stat-vlm').textContent = s.vlm_calls != null ? s.vlm_calls : '—';
+  if (s.vlm_avg_time_s != null) {
+    document.getElementById('stat-avg-vlm').style.display = '';
+    document.getElementById('stat-vlm-time').textContent = s.vlm_avg_time_s.toFixed(2) + ' s';
+  }
+}
+
+function enableControls() {
+  document.getElementById('filter-select').disabled = false;
+  document.getElementById('jump-input').disabled = false;
+  document.getElementById('btn-jump').disabled = false;
+}
+
+init();
+</script>
+</body>
+</html>
