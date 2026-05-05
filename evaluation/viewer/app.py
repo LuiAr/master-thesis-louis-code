@@ -1,13 +1,10 @@
-# Flask web viewer — serves run data and frame images to the browser UI at localhost:5050.
-
 from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
-from datetime import datetime
 
 from flask import Flask, abort, jsonify, render_template, send_file
 
@@ -21,12 +18,6 @@ RUNS_DIR_SEG_VLM = Path(pipeline_config.RUNS_DIR_SEG_VLM)
 _ALL_RUN_ROOTS = [RUNS_DIR_SEG_ONLY, RUNS_DIR_SEG_VLM]
 
 
-#? ---
-#? HELPERS
-#? Functions that read run folders and build data structures for the API routes.
-#? ---
-
-# Returns the full path of a run folder by searching both pipeline subdirectories
 def _resolve_run_dir(run_name: str):
     for root in _ALL_RUN_ROOTS:
         candidate = root / run_name
@@ -34,7 +25,7 @@ def _resolve_run_dir(run_name: str):
             return candidate
     return None
 
-# Lists all run folders from both pipeline subdirectories, sorted by most recently created first
+#? lists all run folders from both pipeline subdirectories
 def _list_runs():
     runs = []
     for root in _ALL_RUN_ROOTS:
@@ -64,7 +55,6 @@ def _list_runs():
         del r["_sort_key"]
     return runs
 
-# Reads the seg_results.jsonl log for a run and returns it as a list of dicts
 def _load_seg_log(run_name: str):
     run_dir = _resolve_run_dir(run_name)
     if run_dir is None:
@@ -74,7 +64,7 @@ def _load_seg_log(run_name: str):
         return []
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
-# Reads the vlm_results.jsonl log and returns a dict keyed by frame_index
+#? reads the vlm_results.jsonl log and returns a dict keyed by frame_index
 def _load_vlm_log(run_name: str):
     run_dir = _resolve_run_dir(run_name)
     if run_dir is None:
@@ -89,7 +79,6 @@ def _load_vlm_log(run_name: str):
             result[rec["frame_index"]] = rec
     return result
 
-# Returns the path to a saved frame JPEG, falling back to original if annotated is missing
 def _frame_path(run_name: str, frame_index: int, annotated: bool):
     run_dir = _resolve_run_dir(run_name)
     if run_dir is None:
@@ -100,22 +89,14 @@ def _frame_path(run_name: str, frame_index: int, annotated: bool):
     return path if path.exists() else None
 
 
-#? ---
-#? ROUTES
-#? Flask API and page routes served to the browser viewer.
-#? ---
-
-# Serves the main viewer HTML page
+#? routes
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# Returns a JSON list of all available runs
 @app.route("/api/runs")
 def api_runs():
     return jsonify(_list_runs())
-
-# Returns all frame records for a run, merged with any VLM results
 @app.route("/api/runs/<run_name>/frames")
 def api_frames(run_name: str):
     seg_log = _load_seg_log(run_name)
@@ -139,7 +120,6 @@ def api_frames(run_name: str):
         frames.append(entry)
     return jsonify(frames)
 
-# Returns the config.json and summary.json for a run
 @app.route("/api/runs/<run_name>/config")
 def api_run_config(run_name: str):
     run_dir = _resolve_run_dir(run_name)
@@ -153,7 +133,6 @@ def api_run_config(run_name: str):
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     return jsonify({"meta": meta, "summary": summary})
 
-# Serves a frame JPEG (original or annotated) for display in the viewer
 @app.route("/api/runs/<run_name>/image/<int:frame_index>/<string:kind>")
 def api_image(run_name: str, frame_index: int, kind: str):
     annotated = kind == "annotated"

@@ -1,4 +1,4 @@
-# Compares VLM models and prompt strategies on a set of images. Results saved to results/.
+#? compares VLM models and prompt strategies on a set of images, results saved to results/
 
 from __future__ import annotations
 
@@ -10,15 +10,10 @@ from pathlib import Path
 
 import requests
 
-#? ---
-#? USER SETTINGS
-#? Edit MODELS and IMAGES to control what gets tested.
-#? ---
-
 OLLAMA_URL = "http://localhost:11434"
 
-# Full candidate list — the script automatically detects which ones are installed in Ollama
-# and only runs those. Pull any model with: ollama pull <name>
+#? full candidate list, the script automatically detects which ones are installed in Ollama and only runs those
+#* uncomment the ones to use, during testing different subset has been tested to not have too many at same time
 CANDIDATE_MODELS = [
     "gemma3:4b",
     # "richardyoung/smolvlm2-2.2b-instruct",
@@ -30,30 +25,24 @@ CANDIDATE_MODELS = [
     # "granite3.2-vision:2b",
 ]
 
-# Images to test — paths relative to the evaluation/ folder
+#? images to test, paths relative to the evaluation/ folder
 IMAGES = [
-    "recordings/images/Generated Image April 08, 2026 - 2_51PM.jpg",
-    "recordings/images/Generated Image April 09, 2026 - 8_11AM.jpg",
-    "recordings/images/Generated Image April 09, 2026 - 10_55AM.jpg",
+    "",
 ]
 
-# Prompt strategies to compare
+#? prompt strategies to compare
 STRATEGIES = ["full", "describe_only", "rule_based"]
 
-# Number of timed runs per combination — first run is a warmup (discarded), rest are recorded.
-# Use 1 to skip warmup and just record one run (faster, less accurate timing).
+#? number of timed runs per combination, first run is warmup (otherwise VLM inference time is biased), rest are recorded
 N_RUNS = 3
 
-# Seconds to wait after unloading a model before loading the next one.
+#? seconds to wait after unloading a model before loading the next one
 UNLOAD_WAIT_S = 60
 
 TIMEOUT = 120
 
-#? ---
-#? PROMPTS
-#? Three strategies — full asks for an action decision, describe_only does not,
-#? rule_based uses the same describe_only prompt but the action is assigned by code.
-#? ---
+#? prompts
+#? three strategies, full asks for an action decision, describe_only does not, rule_based assigns action by code
 
 PROMPTS = {
     "full": """\
@@ -86,7 +75,7 @@ IF MOVING: <toward_mower | away_from_mower | left | right | unclear>
 CONFIDENCE: <high | medium | low>
 """,
 
-    # rule_based uses the same prompt as describe_only — action is assigned by _rule_action()
+    #? rule_based uses the same prompt as describe_only, action is assigned by _rule_action()
     "rule_based": """\
 You are the vision system of an autonomous lawn mower navigating a garden.
 Scan the ENTIRE frame including the sides and edges — do not focus only on the centre.
@@ -108,14 +97,9 @@ REQUIRED_FIELDS = {
     "rule_based":    {"description", "obstacle_type", "movement", "confidence"},
 }
 
-#? ---
-#? RULE-BASED ACTION
-#? Deterministic fallback — assigns an action from parsed VLM fields without asking the VLM.
-#? ---
-
 _ALWAYS_STOP = {"person", "dog", "cat"}
 
-# Returns a deterministic action string from VLM description fields
+#? returns a deterministic action string from VLM description fields
 def _rule_action(parsed: dict):
     obs = parsed.get("obstacle_type", "unknown").lower()
     movement = parsed.get("movement", "unclear").lower()
@@ -139,17 +123,13 @@ def _rule_action(parsed: dict):
     return "STOP"
 
 
-#? ---
-#? OLLAMA HELPERS
-#? Model loading, unloading, and inference calls.
-#? ---
+#? ollama helpers
+#? model loading, unloading, and inference calls
 
-# Encodes an image file as a base64 string for the Ollama API
 def _encode_image(path: Path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
-# Sends one image + prompt to Ollama, returns (raw_text, elapsed_s) or (None, elapsed_s) on failure
 def _call_vlm(model: str, image_b64: str, prompt: str):
     payload = {
         "model": model,
@@ -167,22 +147,18 @@ def _call_vlm(model: str, image_b64: str, prompt: str):
         print(f"    ERROR: {exc}")
         return None, round(time.time() - t0, 2)
 
-# Returns True if a candidate name matches any installed Ollama model name.
-# Handles the common case where Ollama appends :latest to untagged pulls.
+#? returns True if a candidate name matches any installed Ollama model name
 def _matches_installed(candidate: str, installed: set):
     if candidate in installed:
         return True
-    # candidate has no tag — also try with :latest suffix
     if ":" not in candidate.split("/")[-1] and f"{candidate}:latest" in installed:
         return True
-    # candidate has a tag but Ollama stored it without — try stripping the tag
     if ":" in candidate.split("/")[-1]:
         base = candidate.rsplit(":", 1)[0]
         if base in installed or f"{base}:latest" in installed:
             return True
     return False
 
-# Queries Ollama for installed models and returns those present in CANDIDATE_MODELS, preserving order
 def _detect_installed_models():
     try:
         resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
@@ -204,8 +180,7 @@ def _detect_installed_models():
         print(f"Could not reach Ollama at {OLLAMA_URL}: {exc}")
         return []
 
-
-# Unloads a model from Ollama memory by sending a keep_alive=0 request
+#? unloads a model from Ollama memory
 def _unload_model(model: str):
     try:
         requests.post(
@@ -219,12 +194,7 @@ def _unload_model(model: str):
         pass
 
 
-#? ---
-#? RESPONSE PARSING
-#? Extracts key:value fields and checks completeness.
-#? ---
-
-# Parses key:value lines from a VLM response into a lowercase-keyed dict
+#? response parsing
 def _parse(text: str):
     result: dict = {}
     for line in text.splitlines():
@@ -235,17 +205,12 @@ def _parse(text: str):
         result[key.strip().lower().replace(" ", "_")] = val.strip()
     return result
 
-# Returns True if all required fields for the strategy are present and non-empty
+#? returns True if all required fields for the strategy are present and non-empty
 def _well_formed(parsed: dict, strategy: str):
     return REQUIRED_FIELDS[strategy].issubset({k for k, v in parsed.items() if v})
 
 
-#? ---
-#? MAIN
-#? Outer loop = models (load once, run all combos, unload).
-#? Inner loop = images × strategies, each run N_RUNS times (first is warmup).
-#? ---
-
+#? main
 def main():
     eval_dir = Path(__file__).parent.parent
     results_dir = Path(__file__).parent / "results"
@@ -261,7 +226,7 @@ def main():
 
     print(f"\nImages     : {[Path(i).name for i in IMAGES]}")
     print(f"Strategies : {STRATEGIES}")
-    print(f"Runs each  : {N_RUNS} (first is warmup{',' if N_RUNS > 1 else ' — no warmup'} timing = last run)")
+    print(f"Runs each  : {N_RUNS} (first is warmup{',' if N_RUNS > 1 else ' , no warmup'} timing = last run)")
     print(f"{'='*72}\n")
 
     encoded_images = {}
@@ -350,7 +315,7 @@ def main():
     print(f"\nFull results saved to: {out_path.relative_to(Path(__file__).parent.parent)}")
 
 
-# Prints a compact summary table grouped by model and strategy
+#? prints a compact summary table grouped by model and strategy
 def _print_summary(results: list):
     print(f"\n{'='*72}")
     print("SUMMARY")

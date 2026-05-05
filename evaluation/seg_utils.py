@@ -1,4 +1,4 @@
-# Semantic segmentation helpers using torchvision DeepLabV3 — Mac only.
+#? semantic segmentation helpers using torchvision DeepLabV3
 
 from __future__ import annotations
 
@@ -12,25 +12,14 @@ import config
 
 logger = logging.getLogger(__name__)
 
-#? ---
-#? ZONE CONSTANTS
-#? The three spatial zones used for obstacle classification.
-#? ---
-
-# Zone labels — danger = central driving path, context_left/right = peripheral margins
+#? zone labels: danger = central driving path, context_left/right = peripheral margins
 ZONE_DANGER = "danger"
 ZONE_CONTEXT_LEFT = "context_left"
 ZONE_CONTEXT_RIGHT = "context_right"
 
-
-#? ---
-#? MODEL LOADER
-#? Loads the torchvision DeepLabV3 model and caches it for the process lifetime.
-#? ---
-
 _model_cache = {}
 
-# Loads and returns the segmentation model, cached after the first call
+#? loads and returns the segmentation model, cached after the first call
 def load_seg_model():
     if "model" in _model_cache:
         return _model_cache["model"]
@@ -38,7 +27,7 @@ def load_seg_model():
     _model_cache["model"] = model
     return model
 
-# Loads DeepLabV3 with pretrained COCO weights onto the best available device
+#? loads DeepLabV3 with pretrained COCO weights onto the best available device
 def _load_torch_model():
     import torch
     from torchvision.models.segmentation import (
@@ -62,7 +51,7 @@ def _load_torch_model():
     logger.info("Segmentation model ready.")
     return model
 
-# Returns the best available torch device: MPS (Apple Silicon) > CUDA > CPU
+#? returns the best available torch device: MPS > CUDA > CPU
 def _best_device():
     import torch
     if torch.backends.mps.is_available():
@@ -72,21 +61,13 @@ def _best_device():
     return torch.device("cpu")
 
 
-#? ---
-#? PREPROCESSING CONSTANTS
-#? ImageNet mean and std used to normalise frames before inference.
-#? ---
-
+#? preprocessing constants
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
-#? ---
-#? INFERENCE
-#? Runs segmentation on a BGR frame and returns a per-pixel class mask.
-#? ---
-
-# Runs DeepLabV3 on a BGR frame, returns (mask, classes_present, annotated_frame)
+#? inference
+#? runs DeepLabV3 on a BGR frame, returns (mask, classes_present, annotated_frame)
 def run_segmentation(frame_bgr: np.ndarray):
     import torch
     from torchvision import transforms
@@ -113,24 +94,14 @@ def run_segmentation(frame_bgr: np.ndarray):
     return mask, classes_present, annotated
 
 
-#? ---
-#? BLUR DETECTION
-#? Uses Laplacian variance to decide whether a frame is too blurry to send to the VLM.
-#? ---
-
-# Returns (is_blurry, laplacian_variance) for the frame
+#? blur detection
 def is_blurry(frame_bgr: np.ndarray):
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
     variance = cv2.Laplacian(gray, cv2.CV_64F).var()
     return bool(variance < config.BLUR_LAPLACIAN_THRESHOLD), round(float(variance), 2)
 
 
-#? ---
-#? OBSTACLE DETECTION
-#? Classifies detected obstacles into danger zone or context zones (left/right margins).
-#? ---
-
-# Classifies obstacle-class pixels across the three operating zones and returns (danger_detected, context_detected, detections)
+#? obstacle detection
 def get_obstacle_info(mask: np.ndarray):
     h, w = mask.shape
     bottom_row = int(h * (1.0 - config.OPERATING_ZONE_BOTTOM_EXCLUDE))
@@ -153,7 +124,7 @@ def get_obstacle_info(mask: np.ndarray):
         fraction = total_count / total_op_pixels
         if fraction < config.SEG_OBSTACLE_MIN_PIXEL_FRACTION:
             continue
-        # Check danger zone first — any object overlapping it by >= threshold is treated as danger
+        #? danger zone checked first, any object overlapping it by >= threshold is treated as danger
         danger_overlap = zone_counts[ZONE_DANGER] / max(total_count, 1)
         if danger_overlap >= config.SEG_ZONE_OVERLAP_THRESHOLD:
             primary_zone = ZONE_DANGER
@@ -170,12 +141,8 @@ def get_obstacle_info(mask: np.ndarray):
     return danger_detected, context_detected, detections
 
 
-#? ---
-#? VISUALISATION
-#? Draws the colour overlay, zone boundaries, and obstacle labels on frames.
-#? ---
-
-# Blends the seg mask over the frame and draws bottom and side zone boundary lines
+#? visualisation
+#? draws the colour overlay, zone boundaries, and obstacle labels on frames
 def _draw_overlay(frame_bgr: np.ndarray, mask: np.ndarray, alpha: float = 0.45):
     palette = np.array(config.SEG_PALETTE, dtype=np.uint8)
     colour_mask = palette[mask]
@@ -200,7 +167,7 @@ def _draw_overlay(frame_bgr: np.ndarray, mask: np.ndarray, alpha: float = 0.45):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 255), 1, cv2.LINE_AA)
     return blended
 
-# Overlays status label and per-detection zone and fraction info on the frame
+#? overlays status label and per-detection zone and fraction info on the frame
 def draw_obstacle_labels(annotated: np.ndarray, detections: dict, danger_detected: bool, context_detected: bool):
     frame = annotated.copy()
     if danger_detected:

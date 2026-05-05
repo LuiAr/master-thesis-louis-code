@@ -1,6 +1,7 @@
 # VLM-Based Obstacle Detection for Robotic Lawnmowers
 
-Master thesis project — Louis Arbey, Redfield
+Master thesis project 
+by. Louis Arbey
 
 This repository contains the full implementation and evaluation of a vision system for autonomous robotic lawnmowers. The system combines semantic segmentation (DeepLabV3) with a Vision-Language Model (VLM via Ollama) to detect and classify obstacles in camera frames and decide whether the mower should stop, continue, or turn.
 
@@ -37,6 +38,6 @@ Both scripts prompt interactively at runtime — no arguments needed. See `evalu
 
 ## Extras
 
-- `evaluation/flower_test/` — standalone demo: upload two plant images and compare VLM decisions side by side. Requires additional dependencies listed in `evaluation/flower_test/requirements.txt`.
-- `evaluation/model_comparison/` — scripts used during model selection to benchmark candidate VLMs against each other.
-- `data_collection/` — camera server (Flask + OpenCV) for streaming and recording from the Pi. See `data_collection/README.md`.
+- `evaluation/flower_test/`: standalone demo, upload two plant images and compare VLM decisions side by side. Requires additional dependencies listed in `evaluation/flower_test/requirements.txt`.
+- `evaluation/model_comparison/`: scripts used during model selection to benchmark candidate VLMs against each other.
+- `data_collection/`: camera server (Flask + OpenCV) for streaming and recording from the Pi. See `data_collection/README.md`.

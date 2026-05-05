@@ -1,4 +1,4 @@
-# Results evaluator — manual review of pipeline decisions frame by frame.
+#? results evaluator, manual review of pipeline decisions frame by frame
 
 from __future__ import annotations
 
@@ -26,12 +26,7 @@ THESIS_RESULTS_DIR.mkdir(exist_ok=True)
 app = Flask(__name__)
 
 
-#? ---
-#? DATA LOADERS
-#? Functions to read pipeline run logs from disk.
-#? ---
-
-# Returns the full path of a run folder by searching both pipeline subdirectories
+#? data loaders
 def _resolve_run_dir(run_name: str):
     for root in _ALL_RUN_ROOTS:
         candidate = root / run_name
@@ -39,7 +34,7 @@ def _resolve_run_dir(run_name: str):
             return candidate
     return None
 
-# Returns a list of all pipeline run folders from both subdirectories, sorted by most recently created first
+#? returns a list of all pipeline run folders from both subdirectories
 def _list_runs():
     runs = []
     for root in _ALL_RUN_ROOTS:
@@ -68,7 +63,7 @@ def _list_runs():
         del r["_sort_key"]
     return runs
 
-# Loads VLM decisions as a sorted list of dicts (one per VLM call)
+#? loads VLM decisions as a sorted list of dicts
 def _load_vlm_decisions(run_name: str):
     run_dir = _resolve_run_dir(run_name)
     if run_dir is None:
@@ -79,7 +74,7 @@ def _load_vlm_decisions(run_name: str):
     records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     return sorted(records, key=lambda r: r["frame_index"])
 
-# Loads segmentation detections for runs without a VLM log (seg_only setup)
+#? loads segmentation detections for runs without a VLM log (seg_only setup)
 def _load_seg_decisions(run_name: str):
     run_dir = _resolve_run_dir(run_name)
     if run_dir is None:
@@ -91,11 +86,11 @@ def _load_seg_decisions(run_name: str):
     danger = [r for r in records if r.get("danger_detected") or r.get("obstacle_detected")]
     return sorted(danger, key=lambda r: r["frame_index"])
 
-# Returns the path for the manual evaluation JSON file for a run
+#? returns the path for the manual evaluation JSON file
 def _eval_path(run_name: str):
     return EVALUATIONS_DIR / f"manual_eval_{run_name}.json"
 
-# Returns the best available frame image path for a given frame index in a run
+#? returns the best available frame image path
 def _frame_path(run_name: str, frame_index: int):
     run_dir = _resolve_run_dir(run_name)
     if run_dir is None:
@@ -110,12 +105,8 @@ def _frame_path(run_name: str, frame_index: int):
     return None
 
 
-#? ---
-#? EVALUATION STATE
-#? Functions to load, update, and persist the manual evaluation file.
-#? ---
-
-# Builds a clean assessment entry from a VLM or seg decision record
+#? evaluation state
+#? builds a clean assessment entry
 def _init_assessment(record: dict, source: str):
     return {
         "frame_index": record["frame_index"],
@@ -126,7 +117,7 @@ def _init_assessment(record: dict, source: str):
         "note": "",
     }
 
-# Loads existing evaluation or builds a fresh one from the run's decision logs
+#? loads existing evaluation or builds a fresh one from the run's decision logs
 def _load_or_init_eval(run_name: str):
     path = _eval_path(run_name)
     vlm = _load_vlm_decisions(run_name)
@@ -135,7 +126,6 @@ def _load_or_init_eval(run_name: str):
     source = "vlm" if vlm else "seg"
     if path.exists():
         ev = json.loads(path.read_text())
-        # Merge in any new decisions not yet in the saved file
         for d in decisions:
             key = str(d["frame_index"])
             if key not in ev["assessments"]:
@@ -152,31 +142,23 @@ def _load_or_init_eval(run_name: str):
     path.write_text(json.dumps(ev, indent=2))
     return ev, decisions
 
-# Persists the evaluation dict to disk
+#? persists the evaluation dict to disk
 def _save_eval(ev: dict, run_name: str):
     _eval_path(run_name).write_text(json.dumps(ev, indent=2))
 
 
-#? ---
-#? ROUTES
-#? Flask routes for the manual review UI and JSON API.
-#? ---
-
-# Serves the main review page
+#? routes
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# Returns all available pipeline runs
 @app.route("/api/runs")
 def api_runs():
     return jsonify(_list_runs())
 
-# Loads (or initialises) an evaluation for a run and returns all decision records
 @app.route("/api/load/<run_name>")
 def api_load(run_name: str):
     ev, decisions = _load_or_init_eval(run_name)
-    # Build the full decision list by merging pipeline details with saved assessments
     result = []
     for d in decisions:
         key = str(d["frame_index"])
@@ -185,7 +167,7 @@ def api_load(run_name: str):
             "frame_index": d["frame_index"],
             "video_timestamp_s": d.get("video_timestamp_s"),
             "source": ev["source"],
-            # VLM fields
+            #? VLM fields
             "action": d.get("action"),
             "description": d.get("description", ""),
             "obstacle_type": d.get("obstacle_type", ""),
@@ -194,10 +176,10 @@ def api_load(run_name: str):
             "confidence": d.get("confidence", ""),
             "reasoning": d.get("reasoning", ""),
             "trigger_zone": d.get("trigger_zone", ""),
-            # Segmentation fields
+            #? segmentation fields
             "classes_present": [str(c) for c in d.get("classes_present", [])],
             "detections": d.get("detections", {}),
-            # Assessment
+            #? assessment
             "correct": assessment["correct"],
             "note": assessment.get("note", ""),
         })
@@ -210,7 +192,6 @@ def api_load(run_name: str):
         "reviewed": reviewed,
     })
 
-# Serves a frame JPEG from a pipeline run (annotated preferred, falls back to original)
 @app.route("/api/frame_image/<run_name>/<int:frame_index>")
 def api_frame_image(run_name: str, frame_index: int):
     path = _frame_path(run_name, frame_index)
@@ -218,7 +199,6 @@ def api_frame_image(run_name: str, frame_index: int):
         abort(404)
     return send_file(path, mimetype="image/jpeg")
 
-# Saves a correct/wrong assessment for one frame
 @app.route("/api/assess/<run_name>/<int:frame_index>", methods=["POST"])
 def api_assess(run_name: str, frame_index: int):
     body = request.get_json()
@@ -236,7 +216,6 @@ def api_assess(run_name: str, frame_index: int):
     reviewed = sum(1 for a in ev["assessments"].values() if a["correct"] is not None)
     return jsonify({"ok": True, "reviewed": reviewed, "total": len(ev["assessments"])})
 
-# Returns summary stats for a run's evaluation
 @app.route("/api/stats/<run_name>")
 def api_stats(run_name: str):
     path = _eval_path(run_name)
@@ -258,7 +237,6 @@ def api_stats(run_name: str):
         "accuracy": round(accuracy, 3) if accuracy is not None else None,
     })
 
-# Exports the evaluation as a CSV download
 @app.route("/api/export/<run_name>")
 def api_export(run_name: str):
     path = _eval_path(run_name)
@@ -297,7 +275,6 @@ def api_export(run_name: str):
     )
 
 
-# Saves the final CSV directly to the thesis_results folder and returns the saved path
 @app.route("/api/save_to_thesis/<run_name>", methods=["POST"])
 def api_save_to_thesis(run_name: str):
     path = _eval_path(run_name)
@@ -348,7 +325,6 @@ def api_save_to_thesis(run_name: str):
     dest.write_text(output.getvalue(), encoding="utf-8")
     return jsonify({"ok": True, "saved_to": str(dest)})
 
-# Resets all assessments for a run so it can be reviewed again from scratch
 @app.route("/api/reset/<run_name>", methods=["POST"])
 def api_reset(run_name: str):
     path = _eval_path(run_name)

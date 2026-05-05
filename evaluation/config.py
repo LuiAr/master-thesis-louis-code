@@ -1,58 +1,33 @@
-# Shared configuration — edit values here to apply them across both pipelines.
+#? shared configuration, edit values here to apply them across both pipelines
 
-import os
+from pathlib import Path
 
-#? ---
-#? PATHS
-#? Root directories used by all pipeline scripts.
-#? ---
-
-RUNS_DIR = os.path.join(os.path.dirname(__file__), "runs")
-RUNS_DIR_SEG_ONLY = os.path.join(RUNS_DIR, "seg_only")
-RUNS_DIR_SEG_VLM = os.path.join(RUNS_DIR, "seg_and_vlm")
-RUNS_DIR_SEG_VLM_DUAL = os.path.join(RUNS_DIR, "seg_and_vlm_dual")
+#? root directories used by all pipeline scripts
+RUNS_DIR = Path(__file__).parent / "runs"
+RUNS_DIR_SEG_ONLY = RUNS_DIR / "seg_only"
+RUNS_DIR_SEG_VLM = RUNS_DIR / "seg_and_vlm"
+RUNS_DIR_SEG_VLM_DUAL = RUNS_DIR / "seg_and_vlm_dual"
 
 
-#? ---
-#? FRAME SAMPLING
-#? Controls how many frames are skipped between processed frames.
-#? ---
-
-# Process every Nth frame (1 = every frame).
+#? controls how many frames are skipped between processed frames
 FRAME_SAMPLE_EVERY = 5
 
-#? ---
-#? OPERATING ZONE
-#? Excludes the mower body at the bottom of the frame from obstacle detection.
-#? ---
-
-# Strip the bottom fraction of each frame before checking for obstacles.
+#? excludes the mower body at the bottom of the frame from obstacle detection
 OPERATING_ZONE_BOTTOM_EXCLUDE = 0.25
 
-# Left and right margin as a fraction of frame width.
-# In seg_only: obstacles whose majority pixels fall in these margins are fully ignored.
-# In seg_vlm:  the same margins become "context zones" — the VLM is still called but
-#              with a different prompt focused on movement direction and threat trajectory.
+#? side margins as a fraction of frame width, used as context zones in seg_vlm mode
 OPERATING_ZONE_SIDE_MARGIN = 0.25
 
-#? ---
-#? SEGMENTATION MODEL
-#? DeepLabV3 with MobileNetV3-Large backbone, COCO pretrained (21 VOC classes).
-#? ---
-
-# Swap to "deeplabv3_resnet50" for higher accuracy at the cost of speed.
+#? name of the torchvision segmentation model to load
 SEG_MODEL_NAME = "deeplabv3_mobilenet_v3_large"
 
-# Minimum fraction of operating-zone pixels belonging to an obstacle class to flag the frame.
+#? minimum fraction of operating zone pixels belonging to an obstacle class to flag the frame
 SEG_OBSTACLE_MIN_PIXEL_FRACTION = 0.005
 
-# Minimum fraction of an object's own pixels that must overlap a zone for it to be assigned to that zone.
-# Danger zone is checked first — if >= this fraction of the object's pixels are in the danger zone,
-# it is classified as danger even if the majority of the object is in a context zone.
-# Example: 0.05 means 5% of the object touching the danger zone is enough to trigger DANGER.
+#? minimum object pixel overlap fraction needed to assign it to a zone, danger zone checked first
 SEG_ZONE_OVERLAP_THRESHOLD = 0.05
 
-# COCO/PASCAL VOC class indices that count as obstacles.
+#? COCO/PASCAL VOC class indices that count as obstacles
 SEG_OBSTACLE_CLASSES = {
     2:  "bicycle",
     3:  "bird",
@@ -67,65 +42,75 @@ SEG_OBSTACLE_CLASSES = {
     17: "sheep",
 }
 
-# BGR colour palette for the segmentation overlay, one entry per VOC class 0-20.
+#? BGR colour palette for the segmentation overlay, one entry per VOC class 0 to 20
 SEG_PALETTE = [
-    (0,   0,   0),    # 0  background
-    (128, 0,   0),    # 1  aeroplane
-    (0,   128, 0),    # 2  bicycle
-    (128, 128, 0),    # 3  bird
-    (0,   0,   128),  # 4  boat
-    (128, 0,   128),  # 5  bottle
-    (0,   128, 128),  # 6  bus
-    (128, 128, 128),  # 7  car
-    (64,  0,   0),    # 8  cat
-    (192, 0,   0),    # 9  chair
-    (64,  128, 0),    # 10 cow
-    (192, 128, 0),    # 11 dining table
-    (64,  0,   128),  # 12 dog
-    (192, 0,   128),  # 13 horse
-    (64,  128, 128),  # 14 motorbike
-    (192, 128, 128),  # 15 person
-    (0,   64,  0),    # 16 potted plant
-    (128, 64,  0),    # 17 sheep
-    (0,   192, 0),    # 18 sofa
-    (128, 192, 0),    # 19 train
-    (0,   64,  128),  # 20 tv/monitor
+    #? 0 background
+    (0,   0,   0),
+    #? 1 aeroplane
+    (128, 0,   0),
+    #? 2 bicycle
+    (0,   128, 0),
+    #? 3 bird
+    (128, 128, 0),
+    #? 4 boat
+    (0,   0,   128),
+    #? 5 bottle
+    (128, 0,   128),
+    #? 6 bus
+    (0,   128, 128),
+    #? 7 car
+    (128, 128, 128),
+    #? 8 cat
+    (64,  0,   0),
+    #? 9 chair
+    (192, 0,   0),
+    #? 10 cow
+    (64,  128, 0),
+    #? 11 dining table
+    (192, 128, 0),
+    #? 12 dog
+    (64,  0,   128),
+    #? 13 horse
+    (192, 0,   128),
+    #? 14 motorbike
+    (64,  128, 128),
+    #? 15 person
+    (192, 128, 128),
+    #? 16 potted plant
+    (0,   64,  0),
+    #? 17 sheep
+    (128, 64,  0),
+    #? 18 sofa
+    (0,   192, 0),
+    #? 19 train
+    (128, 192, 0),
+    #? 20 tv/monitor
+    (0,   64,  128),
 ]
 
-#? ---
-#? BLUR DETECTION
-#? Laplacian variance threshold — frames below this are skipped before VLM inference.
-#? ---
-
-# Frames with a Laplacian variance below this value are considered too blurry to analyse.
-# 100 is a reasonable starting point — lower = more tolerant, higher = stricter.
+#? blur detection
+#? frames below this Laplacian variance threshold are skipped before VLM inference
 BLUR_LAPLACIAN_THRESHOLD = 100
 
-#? ---
-#? VLM SETTINGS
-#? Controls the VLM endpoint and model used in Setup 2.
-#? ---
-
-# Ollama endpoint. On the Pi set this to http://<macbook-hostname>.local:11434.
+#? vlm settings
+#? Ollama base URL, set to the remote host when running on the Pi
 OLLAMA_BASE_URL = "http://localhost:11434"
 
-# Set OLLAMA vlm to use
+#? default VLM model
 VLM_MODEL = "gemma3:4b"
-# Stronger model used when the user selects high-quality mode at runtime.
+#? stronger model used when the user selects high quality mode at runtime
 VLM_MODEL_STRONG = "gemma4:e2b"
 VLM_TIMEOUT_SECONDS = 120
 
-# Number of sampled frames to suppress the VLM after a call, provided the obstacle class has not changed.
-# Set to 0 to disable cooldown and call the VLM on every obstacle frame.
+#? frames to suppress VLM calls after a detection, 0 disables cooldown
 VLM_COOLDOWN_FRAMES = 15
 
-# Experimental: pass recent VLM detections as context to the next VLM call.
+#! EXPERIMENTAL
+#* pass recent VLM detections as context to the next VLM call 
 VLM_USE_CONTEXT_MEMORY = False
 VLM_CONTEXT_MEMORY_MAX_FRAMES = 4
+#! EXPERIMENTAL
 
-#? ---
-#? OUTPUT QUALITY
-#? JPEG compression level for saved frames.
-#? ---
-
+#? output quality
+#? JPEG compression level for saved frames
 JPEG_QUALITY = 85

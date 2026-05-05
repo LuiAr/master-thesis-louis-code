@@ -1,9 +1,9 @@
-# Curated test runner: runs the VLM on every image in images/, scores against ground_truth.csv, writes results.
+#? curated test runner: runs the VLM on every image in images/, scores against ground_truth.csv, writes results
 
-import sys
+import base64
 import csv
 import json
-import base64
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -14,10 +14,8 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config
 
-#? ---
-#? PATHS
-#? Curated_test folder layout resolved from this script's location.
-#? ---
+#? paths
+#? curated_test folder layout resolved from this script's location
 
 ROOT = Path(__file__).resolve().parent
 IMAGES_DIR = ROOT / "images"
@@ -27,17 +25,11 @@ GROUND_TRUTH_PATH = ROOT / "ground_truth.csv"
 
 VALID_ACTIONS = {"CONTINUE", "STOP", "REROUTE"}
 
-#? ---
-#? VLM CALL
-#? Sends an image and prompt to Ollama and parses the structured response with REROUTE support.
-#? ---
-
-# Encodes a BGR frame to a base64 JPEG string for the Ollama payload
+#? vlm call
 def frame_to_b64(frame_bgr):
     _, buf = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, config.JPEG_QUALITY])
     return base64.b64encode(buf.tobytes()).decode("utf-8")
 
-# Parses the structured key:value VLM response and validates the action against the new schema
 def parse_vlm_response(text):
     result = {
         "description": "",
@@ -68,7 +60,7 @@ def parse_vlm_response(text):
             result["confidence"] = line[len("CONFIDENCE:"):].strip().lower()
     return result
 
-# Calls Ollama with the image and prompt, returns the parsed dict and elapsed time in seconds
+#? calls Ollama with the image and prompt
 def call_vlm(frame_bgr, prompt, model_name, ollama_url):
     image_b64 = frame_to_b64(frame_bgr)
     payload = {
@@ -95,12 +87,7 @@ def call_vlm(frame_bgr, prompt, model_name, ollama_url):
     parsed["raw_text"] = raw_text
     return parsed, elapsed
 
-#? ---
-#? INTERACTIVE SELECTION
-#? Prompts the user at runtime for the model, prompt variant, and run label.
-#? ---
-
-# Asks the user to choose between standard and strong VLM
+#? asks the user for the model, prompt variant, and run label
 def select_model():
     print("")
     print("Select VLM:")
@@ -115,7 +102,7 @@ def select_model():
             return config.VLM_MODEL_STRONG
         print("Invalid input.")
 
-# Lists the .txt files in prompts/ and asks the user to pick one
+#? lists the .txt files in prompts/ and asks the user to pick one
 def select_prompt():
     files = sorted(p for p in PROMPTS_DIR.iterdir() if p.suffix == ".txt")
     if not files:
@@ -131,17 +118,12 @@ def select_prompt():
             return files[int(choice) - 1]
         print("Invalid input.")
 
-# Asks the user for an optional short run label, returns the cleaned string or empty
+#? asks the user for an optional short run label, returns the cleaned string or empty
 def prompt_run_label():
     label = input("Optional short label for this run (press enter to skip): ").strip()
     return label
 
-#? ---
-#? GROUND TRUTH AND SCORING
-#? Loads expected actions and classifies wrong predictions as safe or unsafe.
-#? ---
-
-# Loads ground_truth.csv into a dict keyed by image filename stem (so .jpg or .png both match)
+#? loads expected actions and classifies wrong predictions as safe or unsafe
 def load_ground_truth():
     if not GROUND_TRUTH_PATH.exists():
         raise FileNotFoundError(f"Missing {GROUND_TRUTH_PATH}")
@@ -153,7 +135,7 @@ def load_ground_truth():
             truth[stem] = row
     return truth
 
-# Classifies a prediction outcome: correct, unsafe (CONTINUE when STOP/REROUTE expected), or safe (any other mismatch)
+#? classifies a prediction outcome as correct, unsafe, or safe
 def classify_outcome(expected, predicted):
     if predicted == "ERROR":
         return "error"
@@ -163,12 +145,7 @@ def classify_outcome(expected, predicted):
         return "unsafe"
     return "safe"
 
-#? ---
-#? OUTPUT
-#? Builds the run output directory and writes results.csv and summary.json.
-#? ---
-
-# Builds the timestamped per-run output directory under results/
+#? writes results.csv and summary.json
 def make_run_dir(model_name, prompt_path, label):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_model = model_name.replace(":", "-").replace("/", "-")
@@ -179,7 +156,7 @@ def make_run_dir(model_name, prompt_path, label):
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
-# Writes the per-image results CSV
+#? writes the per-image results CSV
 def write_results_csv(out_dir, rows):
     if not rows:
         return
@@ -202,7 +179,7 @@ def write_results_csv(out_dir, rows):
         writer.writeheader()
         writer.writerows(rows)
 
-# Writes the aggregate summary JSON: confusion matrix, accuracy, safe vs unsafe error counts
+#? writes the aggregate summary JSON with confusion matrix, accuracy, and error counts
 def write_summary_json(out_dir, rows, model_name, prompt_name, label):
     actions = ["CONTINUE", "STOP", "REROUTE"]
     matrix = {a: {b: 0 for b in actions + ["ERROR"]} for a in actions}
@@ -240,12 +217,7 @@ def write_summary_json(out_dir, rows, model_name, prompt_name, label):
     with open(out_dir / "summary.json", "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
 
-#? ---
-#? MAIN
-#? Iterates over the curated images, runs the VLM, scores against ground truth, writes files.
-#? ---
-
-# Main entry point
+#? main
 def main():
     if not IMAGES_DIR.exists():
         raise FileNotFoundError(f"Missing {IMAGES_DIR}")

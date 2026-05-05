@@ -1,4 +1,4 @@
-# Web app: upload two images, analyse both with VLM, show side-by-side reasoning and decision
+#? web app: upload two images, analyse both with VLM, show side-by-side reasoning and decision
 
 from __future__ import annotations
 
@@ -17,11 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import config as pipeline_config
 
 
-#? ---
-#? CONFIGURATION
-#? Model references and VLM endpoint
-#? ---
-
+#? configuration
 OLLAMA_URL = pipeline_config.OLLAMA_BASE_URL
 VLM_MODEL = pipeline_config.VLM_MODEL_STRONG
 SEGFORMER_MODEL = "nvidia/segformer-b5-finetuned-ade-640-640"
@@ -68,23 +64,14 @@ VLM_PROMPT = (
 )
 
 
-#? ---
-#? MODEL STATE
-#? Global references to the segmentation model, loaded once at startup
-#? ---
-
+#? model state
 _seg_extractor = None
 _seg_model = None
 _seg_id2label = None
 _seg_available = False
 
 
-#? ---
-#? SEGMENTATION
-#? Loads SegFormer once and provides helpers to segment and overlay images
-#? ---
-
-# Loads the SegFormer model into globals; sets _seg_available to False if unavailable
+#? segmentation
 def load_segformer():
     global _seg_extractor, _seg_model, _seg_id2label, _seg_available
     try:
@@ -100,7 +87,7 @@ def load_segformer():
         print(f"  Segmentation model unavailable: {e}")
         _seg_available = False
 
-# Runs SegFormer on a PIL image and returns (label_map, id2label) or (None, None) if unavailable
+#? runs SegFormer on a PIL image
 def _run_segmentation(pil_image):
     if not _seg_available:
         return None, None
@@ -115,7 +102,7 @@ def _run_segmentation(pil_image):
     )
     return upsampled.argmax(dim=1).squeeze().numpy(), _seg_id2label
 
-# Returns a PIL image with flower/plant overlay applied (grass and tree excluded)
+#? returns a PIL image with flower/plant overlay applied
 def _build_overlay(pil_image, label_map, id2label):
     img_array = np.array(pil_image).copy()
     overlay = img_array.copy()
@@ -131,19 +118,13 @@ def _build_overlay(pil_image, label_map, id2label):
     blended = (img_array * 0.55 + overlay * 0.45).astype(np.uint8)
     return Image.fromarray(blended)
 
-# Encodes a PIL image as a base64 JPEG string
+#? encodes a PIL image as a base64 JPEG string
 def _encode_pil(pil_image):
     buf = BytesIO()
     pil_image.save(buf, format="JPEG", quality=88)
     return base64.b64encode(buf.getvalue()).decode()
 
-
-#? ---
-#? VLM
-#? Sends an image to Ollama and parses the structured response
-#? ---
-
-# Sends the image to the VLM and returns the raw response text
+#? sends an image to Ollama
 def _query_vlm(pil_image):
     payload = {
         "model": VLM_MODEL,
@@ -159,7 +140,7 @@ def _query_vlm(pil_image):
     resp.raise_for_status()
     return resp.json().get("response", "")
 
-# Parses structured VLM output into a dict of field -> value
+#? parses structured VLM output into a dict
 def _parse_response(text):
     result = {}
     for field in RESPONSE_FIELDS:
@@ -178,12 +159,8 @@ def _parse_response(text):
     return result
 
 
-#? ---
-#? ANALYSIS PIPELINE
-#? Runs full segmentation + VLM pipeline on a single image and returns result dict
-#? ---
-
-# Runs segmentation overlay and VLM on one image; returns dict with base64 image and parsed fields
+#? analysis pipeline
+#? runs full segmentation + VLM pipeline on a single image and returns result dict
 def analyse_image(pil_image):
     label_map, id2label = _run_segmentation(pil_image)
     if label_map is not None:
@@ -201,19 +178,13 @@ def analyse_image(pil_image):
     }
 
 
-#? ---
-#? ROUTES
-#? Flask routes serving the UI and analysis API
-#? ---
-
+#? routes
 app = Flask(__name__)
 
-# Serves the main comparison UI
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# Accepts two uploaded images, runs analysis on each, and returns combined JSON results
 @app.route("/api/analyse", methods=["POST"])
 def api_analyse():
     file_a = request.files.get("image_a")

@@ -1,11 +1,13 @@
-# Setup 1 — segmentation-only baseline pipeline. Works on a single image or a video file.
+#? segmentation only baseline pipeline, works on a single image or a video file
 
 from __future__ import annotations
 
 import json
 import logging
 import sys
+import termios
 import time
+import tty
 from datetime import datetime
 from pathlib import Path
 
@@ -15,27 +17,20 @@ import numpy as np
 import config
 import seg_utils
 
-import termios
-import tty
-
-#? ---
-#? USER SETTINGS
-#? Set IMAGE_PATH for a single image or VIDEO_PATH for a video — leave both empty to get the selector.
-#? ---
+#? user settings
+#? set IMAGE_PATH for a single image or VIDEO_PATH for a video, leave both empty to get the selector
 
 IMAGE_PATH = ""
 VIDEO_PATH = ""
 RUN_NAME = ""
-# video only: frames to skip between samples — 0 uses FRAME_SAMPLE_EVERY from config.py
+
+#? video only: frames to skip between samples, 0 uses FRAME_SAMPLE_EVERY from config.py
 FRAME_EVERY = 0
-# set to False to skip saving annotated frames (faster)
+
+#? set to False to skip saving annotated frames
 SAVE_ANNOTATED = True
 
-#? ---
-#? LOGGING
-#? Standard logging setup used across the pipeline.
-#? ---
-
+#? logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -44,12 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-#? ---
-#? ENTRY POINT
-#? Routes to image mode or video mode depending on which path is set.
-#? ---
-
-# Prompts the user to enter a run name, falls back to a timestamp if left empty
+#? prompts the user to enter a run name, falls back to a timestamp if left empty
 def _prompt_run_name():
     name = input("Enter a name for this run (leave blank for auto timestamp): ").strip()
     if not name:
@@ -58,7 +48,7 @@ def _prompt_run_name():
     print("")
     return name
 
-# Entry point — runs image mode if IMAGE_PATH is set, otherwise asks the user to pick a mode
+#? entry point, runs image mode if IMAGE_PATH is set, otherwise asks the user to pick a mode
 def main():
     if IMAGE_PATH:
         print("-------------------------------")
@@ -79,12 +69,8 @@ def main():
         _run_video()
 
 
-#? ---
-#? IMAGE MODE
-#? Processes a single image file — same output structure as video mode.
-#? ---
-
-# Runs the segmentation pipeline on a single image file
+#? image mode
+#? processes a single image file, same output structure as video mode
 def _run_image():
     img_path = Path(IMAGE_PATH).expanduser().resolve()
     if not img_path.exists():
@@ -135,12 +121,8 @@ def _run_image():
     logger.info("Done.  Result: %s  |  %.2f s  |  Saved to: %s", status, t_elapsed, run_dir)
 
 
-#? ---
-#? VIDEO MODE
-#? Processes a video file frame by frame — same selector and loop as before.
-#? ---
-
-# Runs the segmentation pipeline on a video file; uses selector and name prompt if no overrides given
+#? video mode
+#? processes a video file frame by frame using the same output structure as image mode
 def _run_video(video_path_override=None, run_name_override=None):
     global VIDEO_PATH
     if video_path_override:
@@ -240,12 +222,8 @@ def _run_video(video_path_override=None, run_name_override=None):
     logger.info("Results saved to: %s", run_dir)
 
 
-#? ---
-#? FRAME PROCESSING
-#? Shared logic — runs segmentation on one frame, saves outputs, writes log entry.
-#? ---
-
-# Runs segmentation on one frame, saves JPEG outputs, appends a record to the log, returns the record
+#? frame processing
+#? shared logic, runs segmentation on one frame, saves outputs, writes log entry
 def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float, frames_dir: Path, annotated_dir: Path, log_fh):
     jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, config.JPEG_QUALITY]
     frame_stem = f"frame_{frame_idx:06d}"
@@ -255,7 +233,7 @@ def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float, frames_di
     danger_detected, context_detected, detections = seg_utils.get_obstacle_info(mask)
     inference_time = time.time() - t0
 
-    # seg_only only reacts to the central danger zone — side context zones are ignored
+    #? in seg_only mode only the central danger zone triggers a flag, side context zones are ignored
     cv2.imwrite(str(frames_dir / f"{frame_stem}.jpg"), frame, jpeg_params)
 
     if SAVE_ANNOTATED:
@@ -278,14 +256,10 @@ def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float, frames_di
     return record
 
 
-#? ---
-#? HELPERS
-#? Utilities for output dirs, frame annotation, and the interactive video selector.
-#? ---
-
-# Creates and returns the four run output directories
+#? helpers
+#? creates and returns the four run output directories
 def _make_run_dirs(run_name: str):
-    run_dir = Path(config.RUNS_DIR_SEG_ONLY) / run_name
+    run_dir = config.RUNS_DIR_SEG_ONLY / run_name
     frames_dir = run_dir / "frames"
     annotated_dir = run_dir / "annotated"
     logs_dir = run_dir / "logs"
@@ -293,7 +267,7 @@ def _make_run_dirs(run_name: str):
         d.mkdir(parents=True, exist_ok=True)
     return run_dir, frames_dir, annotated_dir, logs_dir
 
-# Draws the video timestamp and frame index in the bottom-left corner of the frame
+#? draws the video timestamp and frame index in the bottom-left corner of the frame
 def _draw_timestamp(frame: np.ndarray, video_ts: float, frame_idx: int):
     minutes = int(video_ts // 60)
     seconds = video_ts % 60
@@ -301,7 +275,7 @@ def _draw_timestamp(frame: np.ndarray, video_ts: float, frame_idx: int):
     cv2.putText(frame, text, (10, frame.shape[0] - 12),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
 
-# Returns a sorted list of video files from outside_data_collection
+#? returns a sorted list of video files from outside_data_collection
 def _list_video_files():
     d_path = Path(__file__).parent / "recordings" / "outside_data_collection"
     if not d_path.exists():
@@ -314,7 +288,7 @@ def _list_video_files():
         sys.exit(1)
     return files
 
-# Lists available videos then asks the user to process all or pick one; returns (mode, files, prefix)
+#? lists available videos then asks the user to process all or pick one
 def _select_run_mode():
     files = _list_video_files()
     print("\nAvailable videos:")
@@ -332,7 +306,7 @@ def _select_run_mode():
         return "all", files, prefix
     return "pick", files, ""
 
-# Shows an interactive terminal selector and returns the chosen video path as a string
+#? shows an interactive terminal selector and returns the chosen video path as a string
 def _pick_video_file():
     files = _list_video_files()
     options = []

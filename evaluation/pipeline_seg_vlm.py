@@ -1,4 +1,4 @@
-# Setup 2 - segmentation + VLM pipeline. Sends obstacle frames to a VLM running on the MacBook via Ollama.
+#? segmentation and VLM pipeline, sends obstacle frames to a VLM running via Ollama
 
 from __future__ import annotations
 
@@ -21,33 +21,29 @@ import requests
 import config
 import seg_utils
 
-#? ---
-#? USER SETTINGS
-#? Set IMAGE_PATH for a single image or VIDEO_PATH for a video (leave both empty to require VIDEO_PATH).
-#? ---
+#? user settings
+#? set IMAGE_PATH for a single image or VIDEO_PATH for a video, leave both empty to require VIDEO_PATH
 
 IMAGE_PATH = ""
-# path to a video file
+#? path to a video file
 VIDEO_PATH = ""
-# name for the output folder - leave empty for auto timestamp
+#? name for the output folder, leave empty for auto timestamp
 RUN_NAME = ""
-# video only: frames to skip between samples - 0 uses FRAME_SAMPLE_EVERY from config.py
+#? video only: frames to skip between samples, 0 uses FRAME_SAMPLE_EVERY from config.py
 FRAME_EVERY = 0
-# set to False to skip saving annotated frames (faster)
+#? set to False to skip saving annotated frames (faster)
 SAVE_ANNOTATED = True
-# Ollama endpoint - leave empty to use OLLAMA_BASE_URL from config.py
+#? Ollama endpoint, leave empty to use OLLAMA_BASE_URL from config.py
 OLLAMA_URL = ""
-# experimental: pass recent detections as context to the next VLM call
+#? experimental: pass recent detections as context to the next VLM call
 CONTEXT_MEMORY = False
-# send two frames separated by DUAL_FRAME_DELTA_S to the VLM instead of one; overridden at runtime
+#? send two frames separated by DUAL_FRAME_DELTA_S to the VLM instead of one, overridden at runtime
 DUAL_FRAME_MODE = False
-# seconds between the earlier and the current frame sent to the VLM in dual-frame mode
+#? seconds between the earlier and the current frame sent to the VLM in dual frame mode
 DUAL_FRAME_DELTA_S = 1.5
 
-#? ---
-#? LOGGING
-#? Standard logging setup used across the pipeline.
-#? ---
+#? logging
+#? standard logging setup used across the pipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,12 +53,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-#? ---
-#? VLM CLIENT
-#? Builds prompts, calls the Ollama API, and parses the structured VLM response.
-#? ---
+#? vlm client
+#? builds prompts, calls the Ollama API, and parses the structured VLM response
 
-# Prompt for obstacles in the central danger zone - requires an immediate action decision
+#? prompt for obstacles in the central danger zone, requires an immediate action decision
 _PROMPT_DANGER = """\
 You are the vision system of an autonomous robotic lawn mower operating in a garden.
 Your role is to analyse each camera frame and decide the safest immediate action for the mower.
@@ -94,8 +88,8 @@ REASONING: <one sentence explaining the action>
 CONFIDENCE: <high | medium | low>
 """
 
-# Prompt for obstacles detected only in the left/right context margins.
-# Focus: is this obstacle likely to enter the driving path? CONTINUE unless there is clear threat.
+#? prompt for obstacles detected only in the left/right context margins
+#? focus: is this obstacle likely to enter the driving path? CONTINUE unless there is clear threat
 _PROMPT_CONTEXT = """\
 You are the vision system of an autonomous robotic lawn mower operating in a residential garden.
 Your role is to analyse each camera frame and assess whether an obstacle at the side of the frame is a future threat.
@@ -135,7 +129,7 @@ Context from recent frames (treat as hints, not certainty, verify independently)
 
 """
 
-# Preamble injected before the standard prompts when two frames are sent to the VLM
+#? preamble injected before the standard prompts when two frames are sent to the VLM
 _DUAL_FRAME_PREFIX = """\
 You are given TWO frames from the same camera, captured approximately {delta:.1f} seconds apart.
 IMAGE 1 is the earlier frame. IMAGE 2 is the current frame.
@@ -143,17 +137,17 @@ Compare the position and state of any obstacle across both frames to determine w
 
 """
 
-# Builds the danger-zone VLM prompt, optionally prepending rolling context
+#? builds the danger zone VLM prompt, optionally prepending rolling context
 def build_prompt_danger(context_memory: Optional[Deque[dict]]):
     context_block = _build_context_block(context_memory)
     return _PROMPT_DANGER.format(context_block=context_block)
 
-# Builds the context-zone VLM prompt for the given side ("left" or "right")
+#? builds the context zone VLM prompt for the given side ("left" or "right")
 def build_prompt_context(side: str, context_memory: Optional[Deque[dict]]):
     context_block = _build_context_block(context_memory)
     return _PROMPT_CONTEXT.format(side=side, context_block=context_block)
 
-# Returns the context block string from memory, or empty string if disabled
+#? returns the context block string from memory, or empty string if disabled
 def _build_context_block(context_memory: Optional[Deque[dict]]):
     if context_memory and config.VLM_USE_CONTEXT_MEMORY:
         entries = "\n".join(
@@ -163,19 +157,19 @@ def _build_context_block(context_memory: Optional[Deque[dict]]):
         return _CONTEXT_PREFIX.format(entries=entries)
     return ""
 
-# Builds the danger-zone dual-frame prompt with the temporal preamble
+#? builds the danger zone dual frame prompt with the temporal preamble
 def build_prompt_danger_dual(delta: float, context_memory: Optional[Deque[dict]]):
     prefix = _DUAL_FRAME_PREFIX.format(delta=delta)
     context_block = _build_context_block(context_memory)
     return prefix + _PROMPT_DANGER.format(context_block=context_block)
 
-# Builds the context-zone dual-frame prompt for the given side with the temporal preamble
+#? builds the context zone dual frame prompt for the given side with the temporal preamble
 def build_prompt_context_dual(side: str, delta: float, context_memory: Optional[Deque[dict]]):
     prefix = _DUAL_FRAME_PREFIX.format(delta=delta)
     context_block = _build_context_block(context_memory)
     return prefix + _PROMPT_CONTEXT.format(side=side, context_block=context_block)
 
-# Sends two frames (prior then current) and a prompt to the Ollama VLM, returns (parsed_response_dict, elapsed_seconds)
+#? sends two frames (prior then current) and a prompt to the Ollama VLM, returns (parsed_response_dict, elapsed_seconds)
 def call_vlm_dual(frame_current: np.ndarray, frame_prior: np.ndarray, prompt: str, ollama_url: str):
     payload = {
         "model": config.VLM_MODEL,
@@ -201,12 +195,12 @@ def call_vlm_dual(frame_current: np.ndarray, frame_prior: np.ndarray, prompt: st
     parsed["raw_text"] = raw_text
     return parsed, elapsed
 
-# Encodes a BGR frame as a base64 JPEG string for the Ollama API
+#? encodes a BGR frame as a base64 JPEG string for the Ollama API
 def frame_to_b64(frame_bgr: np.ndarray):
     _, buf = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, config.JPEG_QUALITY])
     return base64.b64encode(buf.tobytes()).decode("utf-8")
 
-# Sends a frame and a pre-built prompt to the Ollama VLM, returns (parsed_response_dict, elapsed_seconds)
+#? sends a frame and a pre-built prompt to the Ollama VLM, returns (parsed_response_dict, elapsed_seconds)
 def call_vlm(frame_bgr: np.ndarray, prompt: str, ollama_url: str):
     image_b64 = frame_to_b64(frame_bgr)
     payload = {
@@ -233,7 +227,7 @@ def call_vlm(frame_bgr: np.ndarray, prompt: str, ollama_url: str):
     parsed["raw_text"] = raw_text
     return parsed, elapsed
 
-# Parses the structured key:value fields out of a free-text VLM response
+#? parses the structured key:value fields out of a free-text VLM response
 def _parse_vlm_response(text: str):
     result = {
         "description": "",
@@ -274,31 +268,29 @@ def _parse_vlm_response(text: str):
     return result
 
 
-#? ---
-#? MODEL SELECTION
-#? Prompts the user at runtime to choose between the standard and high-quality VLM.
-#? ---
+#? model selection
+#? prompts the user at runtime to choose between the standard and high quality VLM
 
-# Prompts the user to select a VLM and overrides config.VLM_MODEL accordingly
+#? prompts the user to select a VLM and overrides config.VLM_MODEL accordingly
 def _select_model():
     print("")
     print("Select VLM mode:")
-    print("  [1] Standard  - {}".format(config.VLM_MODEL))
-    print("  [2] Strong    - {}".format(config.VLM_MODEL_STRONG))
+    print(f"  [1] Standard  - {config.VLM_MODEL}")
+    print(f"  [2] Strong    - {config.VLM_MODEL_STRONG}")
     print("")
     while True:
         choice = input("Enter 1 or 2: ").strip()
         if choice == "1":
-            print("Using standard model: {}".format(config.VLM_MODEL))
+            print(f"Using standard model: {config.VLM_MODEL}")
             break
         if choice == "2":
             config.VLM_MODEL = config.VLM_MODEL_STRONG
-            print("Using strong model: {}".format(config.VLM_MODEL))
+            print(f"Using strong model: {config.VLM_MODEL}")
             break
-        print("Invalid input - please enter 1 or 2.")
+        print("Invalid input, please enter 1 or 2.")
     print("")
 
-# Prompts the user to choose between single-frame and dual-frame VLM mode and sets the delta if dual
+#? prompts the user to choose between single frame and dual frame VLM mode and sets the delta if dual
 def _select_pipeline_mode():
     global DUAL_FRAME_MODE, DUAL_FRAME_DELTA_S
     print("Select pipeline mode:")
@@ -323,12 +315,12 @@ def _select_pipeline_mode():
                     print("Value must be greater than 0.")
                 except ValueError:
                     print("Please enter a valid number.")
-            print("Mode: dual-frame  |  delta: {}s".format(DUAL_FRAME_DELTA_S))
+            print(f"Mode: dual-frame  |  delta: {DUAL_FRAME_DELTA_S}s")
             break
-        print("Invalid input - please enter 1 or 2.")
+        print("Invalid input, please enter 1 or 2.")
     print("")
 
-# Prompts the user to enter a run name, falls back to a timestamp if left empty
+#? prompts the user to enter a run name, falls back to a timestamp if left empty
 def _prompt_run_name():
     name = input("Enter a name for this run (leave blank for auto timestamp): ").strip()
     if not name:
@@ -338,12 +330,10 @@ def _prompt_run_name():
     return name
 
 
-#? ---
-#? MAIN
-#? Routes to image mode or video mode depending on which path is set.
-#? ---
+#? main
+#? routes to image mode or video mode depending on which path is set
 
-# Entry point - runs image mode if IMAGE_PATH is set, otherwise asks the user to pick a mode
+#? entry point, runs image mode if IMAGE_PATH is set, otherwise asks the user to pick a mode
 def main():
     _select_model()
     _select_pipeline_mode()
@@ -366,12 +356,10 @@ def main():
         _run_video()
 
 
-#? ---
-#? IMAGE MODE
-#? Processes a single image - same output structure as video mode.
-#? ---
+#? image mode
+#? processes a single image, same output structure as video mode
 
-# Runs the seg+VLM pipeline on a single image file
+#? runs the seg and VLM pipeline on a single image file
 def _run_image():
     img_path = Path(IMAGE_PATH).expanduser().resolve()
     if not img_path.exists():
@@ -413,8 +401,7 @@ def _run_image():
     context_memory: Deque[dict] = deque(maxlen=config.VLM_CONTEXT_MEMORY_MAX_FRAMES)
 
     t0 = time.time()
-    seg_rec, vlm_rec = _process_frame(frame, 0, 0.0, frames_dir, annotated_dir,
-                                       seg_log, vlm_log, context_memory, ollama_url, use_context)
+    seg_rec, vlm_rec = _process_frame(frame, 0, 0.0, frames_dir, annotated_dir, seg_log, vlm_log, context_memory, ollama_url, use_context)
     seg_log.close()
     vlm_log.close()
     t_elapsed = time.time() - t0
@@ -434,12 +421,10 @@ def _run_image():
     logger.info("Done.  Status: %s  |  VLM action: %s  |  %.2f s  |  Saved to: %s", status, action, t_elapsed, run_dir)
 
 
-#? ---
-#? VIDEO MODE
-#? Processes a video file frame by frame using the segmentation + VLM pipeline.
-#? ---
+#? video mode
+#? processes a video file frame by frame using the segmentation and VLM pipeline
 
-# Runs the seg+VLM pipeline on every sampled frame of a video file; uses selector and name prompt if no overrides given
+#? runs the seg and VLM pipeline on every sampled frame of a video, uses selector and name prompt if no overrides given
 def _run_video(video_path_override=None, run_name_override=None):
     global VIDEO_PATH
     if video_path_override:
@@ -510,7 +495,7 @@ def _run_video(video_path_override=None, run_name_override=None):
     context_count = 0
     vlm_calls = 0
     vlm_skipped_blur = 0
-    # rolling buffer of sampled frames for dual-frame lookups: (frame_bgr, frame_idx, video_ts)
+    #? rolling buffer of sampled frames for dual frame lookups: (frame_bgr, frame_idx, video_ts)
     frame_buffer: deque = deque(maxlen=200)
     t_start = time.time()
 
@@ -526,7 +511,7 @@ def _run_video(video_path_override=None, run_name_override=None):
 
             current_ts = frame_idx / fps
 
-            # look up the best prior frame before appending the current one
+            #? look up the best prior frame before appending the current one
             prior_frame = None
             prior_frame_idx = None
             actual_delta = None
@@ -586,18 +571,11 @@ def _run_video(video_path_override=None, run_name_override=None):
     logger.info("Results saved to: %s", run_dir)
 
 
-#? ---
-#? FRAME PROCESSING
-#? Shared logic - runs seg + VLM on one frame, saves outputs, writes log entries.
-#? ---
+#? frame processing
+#? shared logic, runs segmentation and VLM on one frame, saves outputs, writes log entries
 
-# Runs seg and VLM on one frame, writes to logs, returns (seg_record, vlm_record or None)
-def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float,
-                   frames_dir: Path, annotated_dir: Path,
-                   seg_log, vlm_log, context_memory: Deque, ollama_url: str, use_context: bool,
-                   prior_frame: Optional[np.ndarray] = None,
-                   prior_frame_idx: Optional[int] = None,
-                   temporal_delta_s: Optional[float] = None):
+#? runs seg and VLM on one frame, writes to logs, returns (seg_record, vlm_record or None)
+def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float, frames_dir: Path, annotated_dir: Path, seg_log, vlm_log, context_memory: Deque, ollama_url: str, use_context: bool, prior_frame: Optional[np.ndarray] = None, prior_frame_idx: Optional[int] = None, temporal_delta_s: Optional[float] = None):
     jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, config.JPEG_QUALITY]
     frame_stem = f"frame_{frame_idx:06d}"
 
@@ -646,7 +624,7 @@ def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float,
                 else:
                     prompt = build_prompt_context(side, context_memory if use_context else None)
 
-            vlm_mode_label = "dual-frame (delta={}s)".format(temporal_delta_s) if prior_frame is not None else "single-frame (cold start)"
+            vlm_mode_label = f"dual-frame (delta={temporal_delta_s}s)" if prior_frame is not None else "single-frame (cold start)"
             logger.info("[frame %06d] %s obstacle (var=%.1f) - calling VLM [%s] ...", frame_idx, trigger_zone, lap_variance, vlm_mode_label)
 
             if prior_frame is not None:
@@ -694,12 +672,10 @@ def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float,
     return seg_record, vlm_result
 
 
-#? ---
-#? HELPERS
-#? Frame annotation utilities and Ollama health check.
-#? ---
+#? helpers
+#? frame annotation utilities and Ollama health check
 
-# Draws the VLM obstacle type, action, and confidence onto the annotated frame
+#? draws the VLM obstacle type, action, and confidence onto the annotated frame
 def _draw_vlm_overlay(frame: np.ndarray, vlm_result: dict):
     action = vlm_result.get("action", "")
     obstacle_type = vlm_result.get("obstacle_type", "")
@@ -716,7 +692,7 @@ def _draw_vlm_overlay(frame: np.ndarray, vlm_result: dict):
     cv2.putText(frame, f"ACTION: {action}",
                 (10, h - 32), cv2.FONT_HERSHEY_DUPLEX, 0.85, action_colour, 2, cv2.LINE_AA)
 
-# Draws the video timestamp and frame index in the bottom-left corner of the frame
+#? draws the video timestamp and frame index in the bottom-left corner of the frame
 def _draw_timestamp(frame: np.ndarray, video_ts: float, frame_idx: int):
     minutes = int(video_ts // 60)
     seconds = video_ts % 60
@@ -724,9 +700,9 @@ def _draw_timestamp(frame: np.ndarray, video_ts: float, frame_idx: int):
     cv2.putText(frame, text, (10, frame.shape[0] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1, cv2.LINE_AA)
 
-# Creates and returns the four run output directories, routing dual-frame runs to a separate folder
+#? creates and returns the four run output directories, routing dual frame runs to a separate folder
 def _make_run_dirs(run_name: str, dual_mode: bool = False):
-    base = Path(config.RUNS_DIR_SEG_VLM_DUAL) if dual_mode else Path(config.RUNS_DIR_SEG_VLM)
+    base = config.RUNS_DIR_SEG_VLM_DUAL if dual_mode else config.RUNS_DIR_SEG_VLM
     run_dir = base / run_name
     frames_dir = run_dir / "frames"
     annotated_dir = run_dir / "annotated"
@@ -736,7 +712,7 @@ def _make_run_dirs(run_name: str, dual_mode: bool = False):
     return run_dir, frames_dir, annotated_dir, logs_dir
 
 
-# Returns a sorted list of video files from outside_data_collection
+#? returns a sorted list of video files from outside_data_collection
 def _list_video_files():
     d_path = Path(__file__).parent / "recordings" / "outside_data_collection"
     if not d_path.exists():
@@ -749,7 +725,7 @@ def _list_video_files():
         sys.exit(1)
     return files
 
-# Lists available videos then asks the user to process all or pick one; returns (mode, files, prefix)
+#? lists available videos then asks the user to process all or pick one, returns (mode, files, prefix)
 def _select_run_mode():
     files = _list_video_files()
     print("\nAvailable videos:")
@@ -767,7 +743,7 @@ def _select_run_mode():
         return "all", files, prefix
     return "pick", files, ""
 
-# Shows an interactive terminal selector and returns the chosen video path as a string
+#? shows an interactive terminal selector and returns the chosen video path as a string
 def _pick_video_file():
     files = _list_video_files()
     options = []
@@ -840,7 +816,7 @@ def _pick_video_file():
     return str(files[selected_idx])
 
 
-# Checks that Ollama is reachable and that the configured VLM model is available
+#? checks that Ollama is reachable and that the configured VLM model is available
 def _check_ollama(url: str):
     try:
         r = requests.get(f"{url}/api/tags", timeout=5)

@@ -1,4 +1,4 @@
-# Streamlit dashboard for comparing VLM model benchmark results from run_comparison.py.
+#? streamlit dashboard for comparing VLM model benchmark results from run_comparison.py
 
 from __future__ import annotations
 
@@ -8,29 +8,21 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-#? ---
-#? PATHS
-#? ---
-
+#? paths
 RESULTS_DIR = Path(__file__).parent / "results"
 EVAL_DIR = Path(__file__).parent.parent
 
-#? ---
-#? DATA LOADING
-#? ---
+#? data loading
 
-# Returns a sorted list of result JSON files in the results/ folder
 def _list_result_files():
     if not RESULTS_DIR.exists():
         return []
     return sorted(RESULTS_DIR.glob("comparison_*.json"), reverse=True)
 
-# Loads a JSON result file and returns (run_id, list of result dicts)
 def _load_file(path: Path):
     data = json.loads(path.read_text())
     return data.get("run_id", path.stem), data.get("results", [])
 
-# Flattens result records into a DataFrame, expanding parsed fields
 def _to_dataframe(results: list):
     rows = []
     for r in results:
@@ -57,9 +49,7 @@ def _to_dataframe(results: list):
     return pd.DataFrame(rows)
 
 
-#? ---
-#? COLOUR HELPERS
-#? ---
+#? colour helpers
 
 _ACTION_COLOURS = {
     "STOP":       "#e74c3c",
@@ -69,26 +59,18 @@ _ACTION_COLOURS = {
 }
 _CONF_COLOURS = {"high": "#2ecc71", "medium": "#f39c12", "low": "#e74c3c"}
 
-# Wraps text in a coloured badge span
 def _badge(text: str, colour: str):
     return f'<span style="background:{colour};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:bold">{text}</span>'
-
-# Returns an action badge HTML string
+    
 def _action_badge(action: str):
     colour = _ACTION_COLOURS.get(action.upper(), "#888")
     return _badge(action, colour)
 
-# Returns a confidence badge HTML string
 def _conf_badge(conf: str):
     colour = _CONF_COLOURS.get(conf.lower(), "#888")
     return _badge(conf, colour)
 
-
-#? ---
-#? PAGE: OVERVIEW
-#? Summary table and timing chart across all models and strategies.
-#? ---
-
+#? page: overview
 def _page_overview(df: pd.DataFrame):
     st.subheader("Timing & Actions")
 
@@ -105,7 +87,7 @@ def _page_overview(df: pd.DataFrame):
         st.info("No data matches the current filters.")
         return
 
-    # Timing bar chart
+    #? timing bar chart
     chart_data = filtered[["model", "strategy", "elapsed_s"]].dropna()
     chart_data["label"] = chart_data["model"] + " / " + chart_data["strategy"]
     st.bar_chart(chart_data.set_index("label")["elapsed_s"], use_container_width=True)
@@ -115,7 +97,7 @@ def _page_overview(df: pd.DataFrame):
 
     st.divider()
 
-    # Summary table with colour-coded action column
+    #? summary table 
     st.subheader("Results at a glance")
     for _, row in filtered.iterrows():
         c1, c2, c3, c4, c5 = st.columns([3, 2, 1.5, 1.5, 1.5])
@@ -127,12 +109,7 @@ def _page_overview(df: pd.DataFrame):
         wf_icon = "✅" if row["well_formed"] else ("❌" if row["success"] else "⚠️")
         c5.caption(f"{elapsed}  {wf_icon}")
 
-
-#? ---
-#? PAGE: RESPONSE COMPARISON
-#? Side-by-side cards for each model × strategy combination.
-#? ---
-
+#? page: response comparison
 def _page_responses(df: pd.DataFrame):
     st.subheader("Side-by-side response comparison")
 
@@ -148,10 +125,9 @@ def _page_responses(df: pd.DataFrame):
         st.info("No results for this combination.")
         return
 
-    # Show the image if it exists on disk
+    #? show the image if it exists on disk
     image_path = EVAL_DIR / "recordings" / "images" / sel_image
     if not image_path.exists():
-        # Try finding it by name alone
         matches = list(EVAL_DIR.rglob(sel_image))
         if matches:
             image_path = matches[0]
@@ -191,11 +167,7 @@ def _page_responses(df: pd.DataFrame):
                 st.code(row["raw"] or "(no response)", language=None)
 
 
-#? ---
-#? PAGE: PROMPTS
-#? Shows the full prompt text used for each strategy.
-#? ---
-
+#? page: prompts
 def _page_prompts(df: pd.DataFrame):
     st.subheader("Prompts used")
     st.caption("These are the exact prompts sent to the VLM for each strategy.")
@@ -207,12 +179,7 @@ def _page_prompts(df: pd.DataFrame):
         with st.expander(f"`{strategy}`", expanded=True):
             st.code(prompt, language=None)
 
-
-#? ---
-#? PAGE: RAW DATA
-#? Filterable full table of all results.
-#? ---
-
+#? page: raw data
 def _page_raw(df: pd.DataFrame):
     st.subheader("All results")
 
@@ -229,11 +196,7 @@ def _page_raw(df: pd.DataFrame):
     )
 
 
-#? ---
-#? APP ENTRY POINT
-#? File selector in sidebar, tab navigation in main area.
-#? ---
-
+#? app entry point
 def main():
     st.set_page_config(page_title="VLM Benchmark", layout="wide")
     st.title("VLM Benchmark Dashboard")

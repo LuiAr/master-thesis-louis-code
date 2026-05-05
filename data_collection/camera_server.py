@@ -1,55 +1,46 @@
-# Camera server: streams Pi camera live and records AVI files via a browser UI.
+#? streams Pi camera live and records AVI files via a browser UI
 
 from __future__ import annotations
 
-import os
-import sys
-import time
-import platform
-import threading
-import logging
 import base64
+import logging
+import platform
+import sys
+import threading
+import time
 from datetime import datetime
+from pathlib import Path
 
 import cv2
 import numpy as np
 from flask import Flask, Response, jsonify, request
 
-#? ---
-#? ENVIRONMENT DETECTION
-#? Detects whether the server is running on a Raspberry Pi, macOS, or generic Linux.
-#? ---
+#? environment detection
+#? detects whether the server is running on a Raspberry Pi or macOS
 
 _IS_MAC = platform.system() == "Darwin"
 _IS_LINUX = platform.system() == "Linux"
-_IS_PI = _IS_LINUX and os.path.exists("/proc/device-tree/model") and \
-         "raspberry" in open("/proc/device-tree/model", "r", errors="ignore").read().lower()
+_IS_PI = _IS_LINUX and Path("/proc/device-tree/model").exists() and \
+         "raspberry" in Path("/proc/device-tree/model").read_text(errors="ignore").lower()
 
 if _IS_PI:
     ENV_NAME = "Raspberry Pi"
-    RECORDINGS_DIR = "/home/pi/recordings"
-    SCREENSHOTS_DIR = "/home/pi/screenshots"
+    RECORDINGS_DIR = Path("/home/pi/recordings")
+    SCREENSHOTS_DIR = Path("/home/pi/screenshots")
     CAM_BACKEND = cv2.CAP_V4L2
 elif _IS_MAC:
     ENV_NAME = "macOS"
-    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    RECORDINGS_DIR = os.path.join(_SCRIPT_DIR, "recordings")
-    SCREENSHOTS_DIR = os.path.join(_SCRIPT_DIR, "screenshots")
+    RECORDINGS_DIR = Path(__file__).parent / "recordings"
+    SCREENSHOTS_DIR = Path(__file__).parent / "screenshots"
     CAM_BACKEND = cv2.CAP_AVFOUNDATION
 else:
     ENV_NAME = "Linux (generic)"
-    RECORDINGS_DIR = os.path.expanduser("~/recordings")
-    SCREENSHOTS_DIR = os.path.expanduser("~/screenshots")
+    RECORDINGS_DIR = Path.home() / "recordings"
+    SCREENSHOTS_DIR = Path.home() / "screenshots"
     CAM_BACKEND = cv2.CAP_V4L2
 
-# Safety guard - catch any misconfiguration early
-assert isinstance(RECORDINGS_DIR, str), f"RECORDINGS_DIR is not a string: {RECORDINGS_DIR!r}"
-assert isinstance(SCREENSHOTS_DIR, str), f"SCREENSHOTS_DIR is not a string: {SCREENSHOTS_DIR!r}"
-
-#? ---
-#? FIXED CONFIG
-#? Static camera and server configuration values.
-#? ---
+#? fixed config
+#? static camera and server configuration values
 
 STREAM_WIDTH = 1280
 STREAM_HEIGHT = 720
@@ -59,12 +50,10 @@ JPEG_QUALITY = 80
 SERVER_PORT = 5555
 CAMERA_INDEX = 0
 
-#? ---
-#? TERMINAL BANNER
-#? Prints a startup summary to the terminal with environment details and the server URL.
-#? ---
+#? terminal banner
+#? prints a startup summary to the terminal with environment details and the server URL
 
-# Prints a formatted startup banner showing environment, paths, and server URL
+#? prints a formatted startup banner showing environment, paths, and server URL
 def _print_banner():
     RESET = "\033[0m"
     BOLD = "\033[1m"
@@ -77,15 +66,14 @@ def _print_banner():
     if _IS_PI:
         env_colour = GREEN
         env_details = [
-            f"  {DIM}Camera backend :{RESET} V4L2  (native Linux video layer)",
+            f"  {DIM}Camera backend :{RESET} native Linux video layer",
             f"  {DIM}Recordings     :{RESET} {RECORDINGS_DIR}",
             f"  {DIM}Screenshots    :{RESET} {SCREENSHOTS_DIR}",
-            f"  {DIM}Note           :{RESET} Run  v4l2-ctl --list-devices  if camera index fails",
         ]
     elif _IS_MAC:
         env_colour = BLUE
         env_details = [
-            f"  {DIM}Camera backend :{RESET} AVFoundation  (native macOS)",
+            f"  {DIM}Camera backend :{RESET} native macOS",
             f"  {DIM}Recordings     :{RESET} {RECORDINGS_DIR}",
             f"  {DIM}Screenshots    :{RESET} {SCREENSHOTS_DIR}",
         ]
@@ -108,6 +96,7 @@ def _print_banner():
     for detail in env_details:
         print(detail)
     print(f"  {line}")
+    #? specific for the used raspberry
     print(f"  {DIM}Web UI       :{RESET}  {CYAN}http://192.168.4.1:{SERVER_PORT}/{RESET}  (open in your browser)")
     print(f"  {line}\n")
     sys.stdout.flush()
@@ -116,15 +105,13 @@ def _print_banner():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
 
-os.makedirs(RECORDINGS_DIR, exist_ok=True)
-os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 
-#? ---
-#? SHARED STATE
-#? Threading locks and mutable globals for the camera frame, recording state, and screenshots.
-#? ---
+#? shared state
+#? threading locks and mutable globals for the camera frame, recording state, and screenshots
 
 _latest_frame = None
 _frame_lock = threading.Lock()
@@ -143,12 +130,10 @@ _rec_frame_lock = threading.Lock()
 _screenshots = []
 _screenshots_lock = threading.Lock()
 
-#? ---
-#? CAMERA LOOP
-#? Background thread that reads frames from the camera and writes to the active recording.
-#? ---
+#? camera loop
+#? background thread that reads frames from the camera and writes to the active recording
 
-# Runs in a background thread - grabs frames, updates the shared frame, and writes to the recorder
+#? runs in a background thread, grabs frames, updates the shared frame, and writes to the recorder
 def camera_loop():
     global _latest_frame, _is_recording, _video_writer
     global _rec_frame_counter, _rec_frame_interval
@@ -161,7 +146,7 @@ def camera_loop():
         if _IS_PI:
             log.error("Run  v4l2-ctl --list-devices  to confirm the correct index.")
         elif _IS_MAC:
-            log.error("Check System Settings - Privacy & Security - Camera.")
+            log.error("Check System Settings -> Privacy & Security -> Camera.")
         return
 
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
@@ -184,7 +169,7 @@ def camera_loop():
             with _frame_lock:
                 _latest_frame = frame.copy()
 
-            # Sub-sample: write only every Nth frame to keep recording at chosen FPS
+            #? write only every Nth frame to keep the recording at the chosen FPS
             with _rec_frame_lock:
                 _rec_frame_counter += 1
                 should_write = (_rec_frame_counter >= _rec_frame_interval)
@@ -202,12 +187,9 @@ def camera_loop():
         cap.release()
         log.info("Camera pipeline stopped.")
 
-#? ---
-#? MJPEG STREAM
-#? Yields MJPEG-encoded frames for the browser live preview - does not write to disk.
-#? ---
+#? stream
 
-# Generator that yields MJPEG-encoded frames for the /video_feed route
+#? generator 
 def _generate_mjpeg():
     encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
     while True:
@@ -232,12 +214,9 @@ def _generate_mjpeg():
         )
         time.sleep(1.0 / STREAM_FPS)
 
-#? ---
-#? INTERNAL HELPERS
-#? Shared utility for stopping an active recording safely from any thread.
-#? ---
+#? internal helpers
 
-# Stops the active recording and returns (saved_path, size_mb) - thread-safe
+#? stops the active recording and returns (saved_path, size_mb), threadsafe
 def _do_stop_recording():
     global _is_recording, _video_writer, _recording_path, _recording_start
     with _state_lock:
@@ -251,28 +230,26 @@ def _do_stop_recording():
         saved = _recording_path
         _recording_path = None
 
-    if saved and os.path.exists(saved):
-        size_mb = os.path.getsize(saved) / (1024 * 1024)
+    if saved and saved.exists():
+        size_mb = saved.stat().st_size / (1024 * 1024)
         log.info("Recording saved -> %s (%.1f MB)", saved, size_mb)
         return saved, round(size_mb, 2)
     return saved, 0
 
-#? ---
-#? FLASK ROUTES
-#? API and page routes served to the browser UI.
-#? ---
+#? flask routes
+#? API and page routes served to the browser UI
 
-# Serves the main HTML page
+#? serves the main HTML page
 @app.route("/")
 def index():
     return _HTML_PAGE
 
-# Serves the MJPEG camera stream
+#? serves the MJPEG camera stream
 @app.route("/video_feed")
 def video_feed():
     return Response(_generate_mjpeg(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
-# Starts a new recording at the requested FPS, optionally stopping automatically after a duration
+#? starts a new recording at the requested FPS, optionally stopping automatically after a duration
 @app.route("/start_recording", methods=["POST"])
 def start_recording():
     global _is_recording, _video_writer, _recording_path, _recording_start
@@ -285,13 +262,13 @@ def start_recording():
 
     with _state_lock:
         if _is_recording:
-            return jsonify({"status": "already_recording", "file": _recording_path})
+            return jsonify({"status": "already_recording", "file": str(_recording_path)})
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}_{req_fps}fps.avi")
+        path = RECORDINGS_DIR / f"recording_{timestamp}_{req_fps}fps.avi"
         fourcc = cv2.VideoWriter_fourcc(*"MJPG")
         _video_writer = cv2.VideoWriter(
-            path, fourcc, req_fps,
+            str(path), fourcc, req_fps,
             (int(STREAM_WIDTH), int(STREAM_HEIGHT))
         )
 
@@ -318,17 +295,17 @@ def start_recording():
             _do_stop_recording()
         threading.Thread(target=_auto_stop, daemon=True, name="auto-stop").start()
 
-    return jsonify({"status": "started", "file": path, "duration": duration, "fps": req_fps})
+    return jsonify({"status": "started", "file": str(path), "duration": duration, "fps": req_fps})
 
-# Stops the current recording and returns the saved file path and size
+#? stops the current recording and returns the saved file path and size
 @app.route("/stop_recording", methods=["POST"])
 def stop_recording():
     saved, size_mb = _do_stop_recording()
     if saved:
-        return jsonify({"status": "stopped", "saved_to": saved, "size_mb": size_mb})
+        return jsonify({"status": "stopped", "saved_to": str(saved), "size_mb": size_mb})
     return jsonify({"status": "not_recording"})
 
-# Captures a single JPEG screenshot from the current frame and saves it to disk
+#? captures a single JPEG screenshot from the current frame and saves it to disk
 @app.route("/take_screenshot", methods=["POST"])
 def take_screenshot():
     with _frame_lock:
@@ -339,14 +316,13 @@ def take_screenshot():
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"screenshot_{timestamp}.jpg"
-    path = os.path.join(SCREENSHOTS_DIR, filename)
+    path = SCREENSHOTS_DIR / filename
 
     ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
     if not ok:
         return jsonify({"status": "error", "message": "Failed to encode screenshot."})
 
-    with open(path, "wb") as f:
-        f.write(buf.tobytes())
+    path.write_bytes(buf.tobytes())
 
     thumb = frame.copy()
     h, w = thumb.shape[:2]
@@ -362,27 +338,27 @@ def take_screenshot():
     log.info("Screenshot saved -> %s", path)
     return jsonify({"status": "ok", "filename": filename, "thumb_b64": thumb_b64})
 
-# Renames a saved screenshot file on disk and updates the in-memory list
+#? renames a saved screenshot file on disk and updates the in-memory list
 @app.route("/rename_screenshot", methods=["POST"])
 def rename_screenshot():
     data = request.get_json(force=True)
-    old_name = os.path.basename(data.get("old_name", "").strip())
-    new_name = os.path.basename(data.get("new_name", "").strip())
+    old_name = Path(data.get("old_name", "").strip()).name
+    new_name = Path(data.get("new_name", "").strip()).name
 
     if not old_name or not new_name:
         return jsonify({"status": "error", "message": "old_name and new_name required."})
     if not new_name.lower().endswith(".jpg"):
         new_name += ".jpg"
 
-    old_path = os.path.join(SCREENSHOTS_DIR, old_name)
-    new_path = os.path.join(SCREENSHOTS_DIR, new_name)
+    old_path = SCREENSHOTS_DIR / old_name
+    new_path = SCREENSHOTS_DIR / new_name
 
-    if not os.path.exists(old_path):
+    if not old_path.exists():
         return jsonify({"status": "error", "message": "File not found."})
-    if os.path.exists(new_path):
+    if new_path.exists():
         return jsonify({"status": "error", "message": "Target name already exists."})
 
-    os.rename(old_path, new_path)
+    old_path.rename(new_path)
     with _screenshots_lock:
         for entry in _screenshots:
             if entry["filename"] == old_name:
@@ -393,18 +369,18 @@ def rename_screenshot():
     log.info("Screenshot renamed: %s -> %s", old_name, new_name)
     return jsonify({"status": "ok", "new_name": new_name})
 
-# Returns the current server configuration as JSON
+#? returns the current server configuration as JSON
 @app.route("/config")
 def config():
     return jsonify({
         "env": ENV_NAME,
-        "recordings_dir": RECORDINGS_DIR,
-        "screenshots_dir": SCREENSHOTS_DIR,
+        "recordings_dir": str(RECORDINGS_DIR),
+        "screenshots_dir": str(SCREENSHOTS_DIR),
         "record_fps": RECORD_FPS,
         "stream_fps": STREAM_FPS,
     })
 
-# Returns recording status, elapsed time, recent recordings list, and screenshots
+#? returns recording status, elapsed time, recent recordings list, and screenshots
 @app.route("/status")
 def status():
     with _state_lock:
@@ -418,24 +394,20 @@ def status():
 
     recordings = []
     try:
-        for fname in sorted(
-            [f for f in os.listdir(RECORDINGS_DIR) if f.endswith(".avi")],
-            reverse=True
-        )[:10]:
-            fpath = os.path.join(RECORDINGS_DIR, fname)
+        for fpath in sorted(RECORDINGS_DIR.glob("*.avi"), key=lambda p: p.name, reverse=True)[:10]:
             try:
-                size_mb = round(os.path.getsize(fpath) / (1024 * 1024), 2)
+                size_mb = round(fpath.stat().st_size / (1024 * 1024), 2)
             except OSError:
                 size_mb = 0
             try:
-                parts = fname.replace("recording_", "").replace(".avi", "")
+                parts = fpath.stem.replace("recording_", "")
                 if parts.endswith("fps"):
                     parts = "_".join(parts.split("_")[:-1])
                 dt = datetime.strptime(parts, "%Y%m%d_%H%M%S")
                 when = dt.strftime("%Y-%m-%d  %H:%M:%S")
             except Exception:
                 when = ""
-            recordings.append({"name": fname, "size_mb": size_mb, "when": when})
+            recordings.append({"name": fpath.name, "size_mb": size_mb, "when": when})
     except Exception:
         pass
 
@@ -445,7 +417,7 @@ def status():
 
     return jsonify({
         "recording": recording,
-        "file": path,
+        "file": str(path) if path else None,
         "elapsed_s": elapsed_s,
         "est_size_mb": est_size_mb,
         "current_fps": current_fps,
@@ -453,10 +425,8 @@ def status():
         "screenshots": shots,
     })
 
-#? ---
-#? HTML PAGE
-#? Single-file browser UI served at the root route.
-#? ---
+#? html page
+#? single file browser UI served at the root route
 
 _HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
