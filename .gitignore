@@ -44,3 +44,6 @@ models/
 
 *.json
 CLAUDE.md
+EXPERIMENTS.md
+session_context_2026-04-28.md
+CLEANUP_PROMPT.md

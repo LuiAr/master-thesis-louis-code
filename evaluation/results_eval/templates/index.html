@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Decision Reviewer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f3f4f8; color: #1a1d2e; min-height: 100vh; }
+
+    #app { display: flex; height: 100vh; overflow: hidden; }
+    #sidebar { width: 260px; min-width: 260px; background: #fff; border-right: 1px solid #e2e5ef; display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar-title { font-size: 16px; font-weight: 700; color: #1a1d2e; padding: 15px 16px 12px; border-bottom: 1px solid #e2e5ef; }
+    .sidebar-title span { font-size: 11px; color: #9ca3af; font-weight: 400; display: block; margin-top: 2px; }
+    .sidebar-section { padding: 12px 16px; border-bottom: 1px solid #e2e5ef; }
+    .sidebar-section h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; margin-bottom: 8px; }
+
+    select { width: 100%; background: #f8f9fc; border: 1px solid #d0d4e8; border-radius: 6px; color: #1a1d2e; padding: 7px 9px; font-size: 13px; cursor: pointer; margin-bottom: 6px; }
+    select:focus { outline: none; border-color: #4a6ae0; }
+
+    .btn { display: block; width: 100%; padding: 8px; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; margin-top: 5px; text-align: center; }
+    .btn-primary { background: #4a6ae0; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #3a5acc; }
+    .btn-outline { background: #f3f4f8; color: #4b5563; border: 1px solid #d0d4e8; }
+    .btn-outline:hover:not(:disabled) { background: #e8eaf2; }
+    .btn-green { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .btn-green:hover:not(:disabled) { background: #dcfce7; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Stats */
+    .stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #f0f2f8; }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row .lbl { color: #9ca3af; }
+    .stat-row .val { font-weight: 600; }
+    .val-correct { color: #16a34a; }
+    .val-wrong { color: #dc2626; }
+    .val-pending { color: #d97706; }
+    .val-acc { color: #4a6ae0; }
+
+    /* Progress bar */
+    .progress-bar-bg { background: #e8eaf2; border-radius: 4px; height: 5px; margin-top: 8px; overflow: hidden; }
+    .progress-bar-fill { height: 5px; background: #4a6ae0; border-radius: 4px; transition: width 0.3s; }
+
+    /* Top bar */
+    #topbar { background: #fff; border-bottom: 1px solid #e2e5ef; padding: 8px 18px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .run-chip { font-size: 12px; font-weight: 600; color: #1a1d2e; background: #f3f4f8; border: 1px solid #e2e5ef; border-radius: 20px; padding: 3px 10px; }
+    .progress-pill { font-size: 12px; color: #6b7280; background: #f3f4f8; border: 1px solid #e2e5ef; border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
+    .topbar-spacer { flex: 1; }
+
+    /* Review card */
+    #review-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    #card-wrap { flex: 1; overflow: hidden; display: flex; }
+
+    /* Left panel */
+    #panel-left { width: 52%; border-right: 1px solid #e2e5ef; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+    .panel-header { padding: 9px 16px; border-bottom: 1px solid #f0f2f8; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; background: #fafbfc; display: flex; align-items: center; gap: 10px; }
+    .panel-header .frame-info { font-size: 11px; color: #c0c4d4; text-transform: none; letter-spacing: 0; }
+    #frame-display { flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f3f4f8; }
+    #frame-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .no-frame-msg { color: #c0c4d4; font-size: 13px; }
+    /* Current assessment badge on image area */
+    #current-badge { padding: 8px 16px; border-top: 1px solid #e2e5ef; background: #fff; min-height: 38px; display: flex; align-items: center; gap: 8px; }
+    .assessed-correct { font-size: 13px; font-weight: 700; color: #16a34a; }
+    .assessed-wrong { font-size: 13px; font-weight: 700; color: #dc2626; }
+    .assessed-pending { font-size: 12px; color: #c0c4d4; font-style: italic; }
+    .note-display { font-size: 11px; color: #9ca3af; }
+
+    /* Right panel */
+    #panel-right { flex: 1; display: flex; flex-direction: column; overflow-y: auto; background: #fafbfc; }
+    .output-section { padding: 11px 15px; border-bottom: 1px solid #f0f2f8; }
+    .output-section h4 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; margin-bottom: 7px; }
+    .output-row { display: flex; gap: 8px; margin-bottom: 4px; align-items: flex-start; }
+    .output-key { font-size: 11px; color: #9ca3af; min-width: 86px; padding-top: 1px; flex-shrink: 0; }
+    .output-val { font-size: 13px; color: #1a1d2e; flex: 1; line-height: 1.4; }
+    .output-val.mono { font-family: monospace; font-size: 11px; color: #4b5563; }
+
+    .action-badge { display: inline-block; padding: 4px 13px; border-radius: 6px; font-size: 15px; font-weight: 700; }
+    .action-STOP { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .action-CONTINUE { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .action-TURN_LEFT, .action-TURN_RIGHT { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+    .action-none { background: #f3f4f8; color: #9ca3af; border: 1px solid #e2e5ef; }
+
+    .danger-chip { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .danger-yes { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .danger-no { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .class-tag { display: inline-block; background: #f0f2f8; color: #4b5563; border-radius: 4px; padding: 1px 6px; font-size: 11px; margin: 1px 2px; border: 1px solid #e2e5ef; }
+    .zone-tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+
+    /* Action bar */
+    #action-bar { background: #fff; border-top: 2px solid #e2e5ef; padding: 11px 18px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .decision-btn { padding: 10px 28px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.15s; border: 2px solid transparent; }
+    .correct-btn { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+    .correct-btn:hover { background: #dcfce7; border-color: #4ade80; }
+    .correct-btn.active { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .wrong-btn { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+    .wrong-btn:hover { background: #fee2e2; border-color: #f87171; }
+    .wrong-btn.active { background: #dc2626; color: #fff; border-color: #dc2626; }
+    #note-input { flex: 1; background: #f8f9fc; border: 1px solid #d0d4e8; border-radius: 6px; color: #1a1d2e; padding: 7px 10px; font-size: 13px; min-width: 0; }
+    #note-input:focus { outline: none; border-color: #4a6ae0; }
+    #note-input::placeholder { color: #c0c4d4; }
+    .bar-spacer { flex: 1; }
+    .nav-btn { padding: 9px 18px; border-radius: 7px; border: 1px solid #d0d4e8; background: #f3f4f8; color: #4b5563; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .nav-btn:hover:not(:disabled) { background: #e8eaf2; }
+    .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Landing */
+    #landing { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: #9ca3af; background: #f3f4f8; }
+    #landing p { font-size: 15px; }
+    #landing svg { opacity: 0.35; }
+
+    /* Shortcuts hint */
+    .shortcuts-hint { font-size: 11px; color: #c0c4d4; white-space: nowrap; }
+    .shortcuts-hint kbd { background: #f3f4f8; border: 1px solid #d0d4e8; border-radius: 3px; padding: 1px 4px; font-size: 10px; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 18px; right: 18px; background: #fff; border: 1px solid #4a6ae0; border-radius: 8px; padding: 8px 15px; font-size: 13px; color: #2d3a8c; box-shadow: 0 4px 12px rgba(74,106,224,0.15); opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 999; }
+    #toast.show { opacity: 1; }
+
+    /* Completion modal */
+    #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.25); display: none; align-items: center; justify-content: center; z-index: 100; }
+    #modal-overlay.show { display: flex; }
+    #modal { background: #fff; border-radius: 14px; padding: 32px 36px; max-width: 420px; width: 90%; box-shadow: 0 16px 48px rgba(0,0,0,0.14); text-align: center; }
+    #modal .modal-icon { font-size: 42px; margin-bottom: 12px; }
+    #modal h2 { font-size: 20px; font-weight: 700; color: #1a1d2e; margin-bottom: 8px; }
+    #modal p { font-size: 14px; color: #6b7280; line-height: 1.6; margin-bottom: 24px; }
+    .modal-btns { display: flex; gap: 10px; justify-content: center; }
+    .modal-btn { padding: 11px 24px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; border: 2px solid transparent; }
+    .modal-btn-save { background: #4a6ae0; color: #fff; border-color: #4a6ae0; }
+    .modal-btn-save:hover { background: #3a5acc; }
+    .modal-btn-reset { background: #f3f4f8; color: #6b7280; border-color: #e2e5ef; }
+    .modal-btn-reset:hover { background: #e8eaf2; color: #1a1d2e; }
+    .modal-saved-path { font-size: 12px; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 12px; margin-top: 14px; word-break: break-all; display: none; text-align: left; }
+    .modal-btn-close { margin-top: 14px; background: none; border: none; color: #9ca3af; font-size: 13px; cursor: pointer; text-decoration: underline; }
+    .modal-btn-close:hover { color: #1a1d2e; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-title">
+      Decision Reviewer
+      <span>Manual pipeline evaluation</span>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Pipeline run</h3>
+      <select id="run-select"><option value="">-- select run --</option></select>
+      <button class="btn btn-primary" id="load-btn" disabled>Load decisions</button>
+    </div>
+
+    <div class="sidebar-section" id="stats-section" style="display:none">
+      <h3>Results</h3>
+      <div class="stat-row"><span class="lbl">Correct</span><span class="val val-correct" id="stat-correct">-</span></div>
+      <div class="stat-row"><span class="lbl">Wrong</span><span class="val val-wrong" id="stat-wrong">-</span></div>
+      <div class="stat-row"><span class="lbl">Pending</span><span class="val val-pending" id="stat-pending">-</span></div>
+      <div class="stat-row"><span class="lbl">Accuracy</span><span class="val val-acc" id="stat-accuracy">-</span></div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+      <button class="btn btn-green" id="export-btn" style="margin-top:10px">Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+
+    <div id="topbar" style="display:none">
+      <span class="run-chip" id="topbar-run"></span>
+      <span class="progress-pill" id="progress-pill">0 / 0</span>
+      <span class="topbar-spacer"></span>
+    </div>
+
+    <!-- Landing -->
+    <div id="landing">
+      <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+      </svg>
+      <p>Select a pipeline run to start reviewing.</p>
+    </div>
+
+    <!-- Review -->
+    <div id="review-area" style="display:none">
+
+      <div id="card-wrap">
+
+        <!-- Left: frame -->
+        <div id="panel-left">
+          <div class="panel-header">
+            Annotated frame
+            <span class="frame-info" id="frame-info"></span>
+          </div>
+          <div id="frame-display">
+            <img id="frame-img" src="" alt="" style="display:none">
+            <span class="no-frame-msg" id="no-frame-msg">No frame saved for this decision</span>
+          </div>
+          <div id="current-badge">
+            <span class="assessed-pending" id="badge-text">Not reviewed yet</span>
+          </div>
+        </div>
+
+        <!-- Right: VLM + seg output -->
+        <div id="panel-right">
+
+          <div class="output-section" id="vlm-section">
+            <h4>VLM decision</h4>
+            <div id="vlm-content"></div>
+          </div>
+
+          <div class="output-section">
+            <h4>Segmentation</h4>
+            <div id="seg-content"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Action bar -->
+      <div id="action-bar">
+        <button class="nav-btn" id="prev-btn">&#8592;</button>
+        <button class="decision-btn correct-btn" id="correct-btn" onclick="assess(true)">&#10003; Correct</button>
+        <button class="decision-btn wrong-btn" id="wrong-btn" onclick="assess(false)">&#10007; Wrong</button>
+        <input type="text" id="note-input" placeholder="Optional note...">
+        <span class="bar-spacer"></span>
+        <span class="shortcuts-hint"><kbd>C</kbd> correct &nbsp; <kbd>W</kbd> wrong &nbsp; <kbd>&#8592;</kbd><kbd>&#8594;</kbd> navigate</span>
+        <button class="nav-btn" id="next-btn">&#8594;</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Completion modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div class="modal-icon">&#127881;</div>
+    <h2>All decisions reviewed!</h2>
+    <p>You have reviewed every pipeline decision for this run.<br>Would you like to save the results to your thesis folder, or start over?</p>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-save" id="modal-save-btn">Save to thesis folder</button>
+      <button class="modal-btn modal-btn-reset" id="modal-reset-btn">Start again</button>
+    </div>
+    <div class="modal-saved-path" id="modal-saved-path"></div>
+    <button class="modal-btn-close" id="modal-close-btn">Close</button>
+  </div>
+</div>
+
+<script>
+  let decisions = [];
+  let currentIndex = 0;
+  let currentRun = null;
+
+  const runSelect = document.getElementById("run-select");
+  const loadBtn = document.getElementById("load-btn");
+  const topbar = document.getElementById("topbar");
+  const topbarRun = document.getElementById("topbar-run");
+  const progressPill = document.getElementById("progress-pill");
+  const landing = document.getElementById("landing");
+  const reviewArea = document.getElementById("review-area");
+  const statsSection = document.getElementById("stats-section");
+  const exportBtn = document.getElementById("export-btn");
+  const frameImg = document.getElementById("frame-img");
+  const noFrameMsg = document.getElementById("no-frame-msg");
+  const frameInfo = document.getElementById("frame-info");
+  const vlmContent = document.getElementById("vlm-content");
+  const segContent = document.getElementById("seg-content");
+  const badgeText = document.getElementById("badge-text");
+  const noteInput = document.getElementById("note-input");
+  const prevBtn = document.getElementById("prev-btn");
+  const nextBtn = document.getElementById("next-btn");
+  const correctBtn = document.getElementById("correct-btn");
+  const wrongBtn = document.getElementById("wrong-btn");
+  const progressFill = document.getElementById("progress-fill");
+
+  // Init
+  loadRuns();
+
+  async function loadRuns() {
+    const res = await fetch("/api/runs");
+    const runs = await res.json();
+    runs.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r.name;
+      const vlmTag = r.vlm_calls !== null && r.vlm_calls !== undefined ? ` - ${r.vlm_calls} VLM calls` : "";
+      opt.textContent = `${r.name}${vlmTag}`;
+      runSelect.appendChild(opt);
+    });
+  }
+
+  runSelect.addEventListener("change", () => { loadBtn.disabled = !runSelect.value; });
+  loadBtn.addEventListener("click", loadDecisions);
+
+  async function loadDecisions() {
+    currentRun = runSelect.value;
+    if (!currentRun) return;
+    loadBtn.disabled = true;
+    loadBtn.textContent = "Loading...";
+    const res = await fetch(`/api/load/${encodeURIComponent(currentRun)}`);
+    const data = await res.json();
+    if (data.error) { showToast("Error: " + data.error); loadBtn.disabled = false; loadBtn.textContent = "Load decisions"; return; }
+    decisions = data.decisions;
+    topbarRun.textContent = currentRun;
+    topbar.style.display = "flex";
+    landing.style.display = "none";
+    reviewArea.style.display = "flex";
+    reviewArea.style.flexDirection = "column";
+    statsSection.style.display = "block";
+    loadBtn.disabled = false;
+    loadBtn.textContent = "Reload";
+    // Jump to first unreviewed
+    let start = decisions.findIndex(d => d.correct === null);
+    showDecision(start < 0 ? 0 : start);
+    refreshStats();
+  }
+
+  function showDecision(idx) {
+    if (idx < 0 || idx >= decisions.length) return;
+    currentIndex = idx;
+    const d = decisions[idx];
+    prevBtn.disabled = idx === 0;
+    nextBtn.disabled = idx === decisions.length - 1;
+
+    // Frame
+    frameImg.src = `/api/frame_image/${encodeURIComponent(currentRun)}/${d.frame_index}`;
+    frameImg.style.display = "block";
+    noFrameMsg.style.display = "none";
+    frameImg.onerror = () => { frameImg.style.display = "none"; noFrameMsg.style.display = "block"; };
+    frameInfo.textContent = `frame ${d.frame_index}  |  ${d.video_timestamp_s !== null ? d.video_timestamp_s.toFixed(2) + "s" : ""}`;
+
+    // Progress
+    progressPill.textContent = `${idx + 1} / ${decisions.length}`;
+
+    // Note field
+    noteInput.value = d.note || "";
+
+    // Assessment badge
+    renderBadge(d);
+
+    // Highlight decision buttons
+    correctBtn.classList.toggle("active", d.correct === true);
+    wrongBtn.classList.toggle("active", d.correct === false);
+
+    // VLM output
+    const actionCls = `action-${d.action || "none"}`;
+    vlmContent.innerHTML = `
+      <div class="output-row"><span class="output-key">Action</span><span class="output-val"><span class="action-badge ${actionCls}">${d.action || "none"}</span></span></div>
+      ${d.description ? `<div class="output-row"><span class="output-key">Description</span><span class="output-val">${d.description}</span></div>` : ""}
+      ${d.obstacle_type ? `<div class="output-row"><span class="output-key">Obstacle type</span><span class="output-val">${d.obstacle_type}</span></div>` : ""}
+      ${d.movement ? `<div class="output-row"><span class="output-key">Movement</span><span class="output-val">${d.movement}</span></div>` : ""}
+      ${d.threat ? `<div class="output-row"><span class="output-key">Threat</span><span class="output-val">${d.threat}</span></div>` : ""}
+      ${d.confidence ? `<div class="output-row"><span class="output-key">Confidence</span><span class="output-val">${d.confidence}</span></div>` : ""}
+      ${d.reasoning ? `<div class="output-row"><span class="output-key">Reasoning</span><span class="output-val mono">${d.reasoning}</span></div>` : ""}
+      ${d.trigger_zone ? `<div class="output-row"><span class="output-key">Trigger zone</span><span class="output-val"><span class="zone-tag">${d.trigger_zone}</span></span></div>` : ""}
+    `;
+
+    // Segmentation
+    const classes = d.classes_present || [];
+    const classTags = classes.length
+      ? classes.map(c => `<span class="class-tag">${c}</span>`).join("")
+      : `<span style="color:#c0c4d4;font-size:12px">none</span>`;
+    const detKeys = Object.keys(d.detections || {});
+    const detRows = detKeys.map(cls => {
+      const det = d.detections[cls];
+      return `<div class="output-row"><span class="output-key">${cls}</span><span class="output-val mono">${(det.fraction * 100).toFixed(1)}% &nbsp; zone: ${det.zone}</span></div>`;
+    }).join("");
+    segContent.innerHTML = `
+      <div class="output-row"><span class="output-key">Classes</span><span class="output-val">${classTags}</span></div>
+      ${detRows}
+    `;
+  }
+
+  function renderBadge(d) {
+    if (d.correct === true) {
+      badgeText.className = "assessed-correct";
+      badgeText.textContent = "✓ Correct" + (d.note ? "  —  " + d.note : "");
+    } else if (d.correct === false) {
+      badgeText.className = "assessed-wrong";
+      badgeText.textContent = "✗ Wrong" + (d.note ? "  —  " + d.note : "");
+    } else {
+      badgeText.className = "assessed-pending";
+      badgeText.textContent = "Not reviewed yet";
+    }
+  }
+
+  async function assess(correct) {
+    const d = decisions[currentIndex];
+    const note = noteInput.value.trim();
+    const res = await fetch(`/api/assess/${encodeURIComponent(currentRun)}/${d.frame_index}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ correct, note }),
+    });
+    const data = await res.json();
+    decisions[currentIndex].correct = correct;
+    decisions[currentIndex].note = note;
+    correctBtn.classList.toggle("active", correct === true);
+    wrongBtn.classList.toggle("active", correct === false);
+    renderBadge(decisions[currentIndex]);
+    refreshStats();
+    showToast(correct ? "Marked correct" : "Marked wrong");
+    // Check if all decisions are now reviewed
+    const allDone = decisions.every(d => d.correct !== null);
+    if (allDone) {
+      setTimeout(showCompletionModal, 500);
+      return;
+    }
+    // Auto-advance to next unreviewed
+    setTimeout(() => {
+      const next = decisions.findIndex((d, i) => i > currentIndex && d.correct === null);
+      if (next >= 0) showDecision(next);
+      else if (currentIndex + 1 < decisions.length) showDecision(currentIndex + 1);
+    }, 350);
+  }
+
+  prevBtn.addEventListener("click", () => showDecision(currentIndex - 1));
+  nextBtn.addEventListener("click", () => showDecision(currentIndex + 1));
+
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.key === "ArrowRight" || e.key === "n") showDecision(currentIndex + 1);
+    if (e.key === "ArrowLeft" || e.key === "p") showDecision(currentIndex - 1);
+    if (e.key.toLowerCase() === "c") assess(true);
+    if (e.key.toLowerCase() === "w") assess(false);
+  });
+
+  async function refreshStats() {
+    const res = await fetch(`/api/stats/${encodeURIComponent(currentRun)}`);
+    const s = await res.json();
+    if (!s.total) return;
+    document.getElementById("stat-correct").textContent = s.correct;
+    document.getElementById("stat-wrong").textContent = s.wrong;
+    document.getElementById("stat-pending").textContent = s.pending;
+    document.getElementById("stat-accuracy").textContent = s.accuracy !== null ? (s.accuracy * 100).toFixed(1) + "%" : "-";
+    const pct = s.total ? Math.round(100 * s.reviewed / s.total) : 0;
+    progressFill.style.width = pct + "%";
+    progressPill.textContent = `${currentIndex + 1} / ${decisions.length}  (${pct}% reviewed)`;
+  }
+
+  exportBtn.addEventListener("click", () => {
+    window.location.href = `/api/export/${encodeURIComponent(currentRun)}`;
+  });
+
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 1600);
+  }
+
+  // --- Completion modal ---
+  const modalOverlay = document.getElementById("modal-overlay");
+  const modalSaveBtn = document.getElementById("modal-save-btn");
+  const modalResetBtn = document.getElementById("modal-reset-btn");
+  const modalCloseBtn = document.getElementById("modal-close-btn");
+  const modalSavedPath = document.getElementById("modal-saved-path");
+
+  function showCompletionModal() {
+    modalSavedPath.style.display = "none";
+    modalSavedPath.textContent = "";
+    modalSaveBtn.disabled = false;
+    modalSaveBtn.textContent = "Save to thesis folder";
+    modalOverlay.classList.add("show");
+  }
+
+  modalCloseBtn.addEventListener("click", () => modalOverlay.classList.remove("show"));
+  modalOverlay.addEventListener("click", e => { if (e.target === modalOverlay) modalOverlay.classList.remove("show"); });
+
+  modalSaveBtn.addEventListener("click", async () => {
+    modalSaveBtn.disabled = true;
+    modalSaveBtn.textContent = "Saving...";
+    const res = await fetch(`/api/save_to_thesis/${encodeURIComponent(currentRun)}`, { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      modalSavedPath.textContent = "Saved to: " + data.saved_to;
+      modalSavedPath.style.display = "block";
+      modalSaveBtn.textContent = "Saved!";
+    } else {
+      modalSaveBtn.textContent = "Error - try again";
+      modalSaveBtn.disabled = false;
+    }
+  });
+
+  modalResetBtn.addEventListener("click", async () => {
+    if (!confirm("This will clear all your assessments for this run. Are you sure?")) return;
+    const res = await fetch(`/api/reset/${encodeURIComponent(currentRun)}`, { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      modalOverlay.classList.remove("show");
+      await loadDecisions();
+      showToast("Reset done - starting from the beginning.");
+    }
+  });
+</script>
+</body>
+</html>

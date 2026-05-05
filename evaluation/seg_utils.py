@@ -130,18 +130,8 @@ def is_blurry(frame_bgr: np.ndarray):
 #? Classifies detected obstacles into danger zone or context zones (left/right margins).
 #? ---
 
+# Classifies obstacle-class pixels across the three operating zones and returns (danger_detected, context_detected, detections)
 def get_obstacle_info(mask: np.ndarray):
-    """
-    Classifies obstacle-class pixels across the three operating zones.
-
-    Zones (bottom exclusion applied first, then horizontal split):
-      danger        - central column between the two side margins
-      context_left  - left margin (OPERATING_ZONE_SIDE_MARGIN fraction)
-      context_right - right margin (OPERATING_ZONE_SIDE_MARGIN fraction)
-
-    Returns (danger_detected, context_detected, detections).
-    detections: { label: { fraction, zone, zone_fractions } }
-    """
     h, w = mask.shape
     bottom_row = int(h * (1.0 - config.OPERATING_ZONE_BOTTOM_EXCLUDE))
     left_col = int(w * config.OPERATING_ZONE_SIDE_MARGIN)

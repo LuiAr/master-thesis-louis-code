@@ -31,6 +31,8 @@
       overflow: hidden;
     }
     #sidebar h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #718096; padding: 14px 16px 8px; }
+    .run-group-header { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 16px 4px; border-top: 1px solid #e2e8f0; color: #a0aec0; background: #f7fafc; }
+    .run-group-header:first-child { border-top: none; }
     #run-list { overflow-y: auto; flex: 1; }
     .run-item {
       padding: 10px 16px;
@@ -336,16 +338,20 @@ function renderRunList() {
     el.innerHTML = '<p class="empty" style="padding:16px">No runs found. Run a pipeline first.</p>';
     return;
   }
-  el.innerHTML = state.runs.map(r => `
-    <div class="run-item ${state.currentRun === r.name ? 'active' : ''}" onclick="selectRun('${r.name}')">
-      <div class="run-name">${r.name}</div>
-      <div class="run-meta">
-        <span class="badge ${r.setup === 'seg_vlm' ? 'badge-vlm' : 'badge-seg'}">${r.setup === 'seg_vlm' ? 'SEG+VLM' : 'SEG only'}</span>
-        &nbsp;${r.video || ''}
-      </div>
-      <div class="run-meta">${r.frames_processed} frames · ${(r.obstacle_rate * 100).toFixed(1)}% obstacles</div>
-    </div>
-  `).join('');
+  const groups = [
+    { label: 'Seg + VLM', key: 'seg_vlm', runs: state.runs.filter(r => r.setup === 'seg_vlm') },
+    { label: 'Seg only', key: 'seg_only', runs: state.runs.filter(r => r.setup === 'seg_only') },
+  ];
+  el.innerHTML = groups.map(g => {
+    if (!g.runs.length) return '';
+    const items = g.runs.map(r => `
+      <div class="run-item ${state.currentRun === r.name ? 'active' : ''}" onclick="selectRun('${r.name}')">
+        <div class="run-name">${r.name}</div>
+        <div class="run-meta">${r.video || ''}</div>
+        <div class="run-meta">${r.frames_processed} frames · ${(r.obstacle_rate * 100).toFixed(1)}% obstacles</div>
+      </div>`).join('');
+    return `<div class="run-group-header">${g.label}</div>${items}`;
+  }).join('');
 }
 
 async function selectRun(name) {

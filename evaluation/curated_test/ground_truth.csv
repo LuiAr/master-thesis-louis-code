@@ -1,0 +1,19 @@
+filename,expected_action,scenario_type,rationale
+S01.jpg,STOP,moving_person,adult walking directly toward mower in path
+S02.jpg,STOP,moving_person,adult walking laterally across path
+S03.jpg,STOP,moving_person,adult jogging through operation zone
+S04.jpg,STOP,moving_child,child running across the grass
+S05.jpg,STOP,moving_animal,dog running across lawn
+S06.jpg,STOP,moving_animal,cat walking through danger zone
+S07.jpg,STOP,moving_person,adult bending and reaching to pick up object
+S08.jpg,STOP,moving_persons,two adults walking across operation zone
+R01.jpg,REROUTE,furniture,empty wooden garden chair
+R02.jpg,REROUTE,furniture,plastic outdoor table on lawn
+R03.jpg,REROUTE,plants,raised flower bed in operation zone
+R04.jpg,REROUTE,tool,garden rake lying on grass
+R05.jpg,REROUTE,object,football left on lawn
+R06.jpg,REROUTE,tool,coiled garden hose on grass
+R07.jpg,REROUTE,object,abandoned children scooter on lawn
+R08.jpg,REROUTE,stationary_person,person sitting cross-legged reading
+R09.jpg,REROUTE,stationary_person,person sunbathing on towel
+R10.jpg,REROUTE,stationary_person,person standing still looking at phone

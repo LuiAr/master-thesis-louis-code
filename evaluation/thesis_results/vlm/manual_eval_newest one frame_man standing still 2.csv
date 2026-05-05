@@ -1,0 +1,13 @@
+frame_index,video_timestamp_s,source,action,obstacle_type,movement,confidence,reasoning,correct,note
+0,0.0,vlm,TURN_LEFT,person,stationary,high,"The person is stationary and does not pose an immediate threat, so the mower should turn left to avoid them.",True,
+5,0.5,vlm,TURN_LEFT,person,stationary,high,"The person is stationary and does not pose a threat, so the mower should turn left to avoid them.",True,
+10,1.0,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",False,
+15,1.5,vlm,TURN_RIGHT,person,stationary,high,"The person is stationary, so the mower should turn right to avoid them.",True,
+20,2.0,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential safety risk.",False,
+25,2.5,vlm,STOP,person,moving,high,"The person is moving towards the mower, requiring immediate action to avoid a collision.",False,
+30,3.0,vlm,STOP,person,moving,high,"The person is moving towards the mower, requiring immediate action to avoid collision.",False,
+35,3.5,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential safety risk.",False,
+40,4.0,vlm,STOP,person,moving,high,"The person is moving towards the mower, requiring immediate action to avoid a collision.",False,
+45,4.5,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential safety risk.",False,
+50,5.0,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential safety risk.",False,
+55,5.5,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",False,

@@ -8,6 +8,9 @@ import os
 #? ---
 
 RUNS_DIR = os.path.join(os.path.dirname(__file__), "runs")
+RUNS_DIR_SEG_ONLY = os.path.join(RUNS_DIR, "seg_only")
+RUNS_DIR_SEG_VLM = os.path.join(RUNS_DIR, "seg_and_vlm")
+RUNS_DIR_SEG_VLM_DUAL = os.path.join(RUNS_DIR, "seg_and_vlm_dual")
 
 
 #? ---
@@ -16,7 +19,6 @@ RUNS_DIR = os.path.join(os.path.dirname(__file__), "runs")
 #? ---
 
 # Process every Nth frame (1 = every frame).
-# 5 at 30 fps gives ~6 effective fps — fast enough while keeping run times short.
 FRAME_SAMPLE_EVERY = 5
 
 #? ---
@@ -104,10 +106,18 @@ BLUR_LAPLACIAN_THRESHOLD = 100
 #? Controls the VLM endpoint and model used in Setup 2.
 #? ---
 
-# Ollama endpoint. On the Pi set this to http://Luis-MacBook-Pro.local:11434.
+# Ollama endpoint. On the Pi set this to http://<macbook-hostname>.local:11434.
 OLLAMA_BASE_URL = "http://localhost:11434"
+
+# Set OLLAMA vlm to use
 VLM_MODEL = "gemma3:4b"
-VLM_TIMEOUT_SECONDS = 60
+# Stronger model used when the user selects high-quality mode at runtime.
+VLM_MODEL_STRONG = "gemma4:e2b"
+VLM_TIMEOUT_SECONDS = 120
+
+# Number of sampled frames to suppress the VLM after a call, provided the obstacle class has not changed.
+# Set to 0 to disable cooldown and call the VLM on every obstacle frame.
+VLM_COOLDOWN_FRAMES = 15
 
 # Experimental: pass recent VLM detections as context to the next VLM call.
 VLM_USE_CONTEXT_MEMORY = False

@@ -1,3 +1,7 @@
+# Camera server: streams Pi camera live and records AVI files via a browser UI.
+
+from __future__ import annotations
+
 import os
 import sys
 import time
@@ -11,61 +15,67 @@ import cv2
 import numpy as np
 from flask import Flask, Response, jsonify, request
 
-# ─────────────────────────────────────────────
-#  ENVIRONMENT DETECTION - to run on both mac and pi
-# ─────────────────────────────────────────────
-_IS_MAC   = platform.system() == "Darwin"
+#? ---
+#? ENVIRONMENT DETECTION
+#? Detects whether the server is running on a Raspberry Pi, macOS, or generic Linux.
+#? ---
+
+_IS_MAC = platform.system() == "Darwin"
 _IS_LINUX = platform.system() == "Linux"
-_IS_PI    = _IS_LINUX and os.path.exists("/proc/device-tree/model") and \
-            "raspberry" in open("/proc/device-tree/model", "r", errors="ignore").read().lower()
+_IS_PI = _IS_LINUX and os.path.exists("/proc/device-tree/model") and \
+         "raspberry" in open("/proc/device-tree/model", "r", errors="ignore").read().lower()
 
 if _IS_PI:
-    ENV_NAME        = "Raspberry Pi"
-    RECORDINGS_DIR  = "/home/ubuntu/louis/recordings"
-    SCREENSHOTS_DIR = "/home/ubuntu/louis/screenshots"
-    CAM_BACKEND     = cv2.CAP_V4L2
+    ENV_NAME = "Raspberry Pi"
+    RECORDINGS_DIR = "/home/pi/recordings"
+    SCREENSHOTS_DIR = "/home/pi/screenshots"
+    CAM_BACKEND = cv2.CAP_V4L2
 elif _IS_MAC:
-    ENV_NAME        = "macOS"
-    _SCRIPT_DIR     = os.path.dirname(os.path.abspath(__file__))
-    RECORDINGS_DIR  = os.path.join(_SCRIPT_DIR, "recordings")
+    ENV_NAME = "macOS"
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    RECORDINGS_DIR = os.path.join(_SCRIPT_DIR, "recordings")
     SCREENSHOTS_DIR = os.path.join(_SCRIPT_DIR, "screenshots")
-    CAM_BACKEND     = cv2.CAP_AVFOUNDATION
+    CAM_BACKEND = cv2.CAP_AVFOUNDATION
 else:
-    ENV_NAME        = "Linux (generic)"
-    RECORDINGS_DIR  = os.path.expanduser("~/louis/recordings")
-    SCREENSHOTS_DIR = os.path.expanduser("~/louis/screenshots")
-    CAM_BACKEND     = cv2.CAP_V4L2
+    ENV_NAME = "Linux (generic)"
+    RECORDINGS_DIR = os.path.expanduser("~/recordings")
+    SCREENSHOTS_DIR = os.path.expanduser("~/screenshots")
+    CAM_BACKEND = cv2.CAP_V4L2
 
-# Safety guard — catch any misconfiguration early
-assert isinstance(RECORDINGS_DIR,  str), f"RECORDINGS_DIR is not a string: {RECORDINGS_DIR!r}"
+# Safety guard - catch any misconfiguration early
+assert isinstance(RECORDINGS_DIR, str), f"RECORDINGS_DIR is not a string: {RECORDINGS_DIR!r}"
 assert isinstance(SCREENSHOTS_DIR, str), f"SCREENSHOTS_DIR is not a string: {SCREENSHOTS_DIR!r}"
 
-# ─────────────────────────────────────────────
-#  FIXED CONFIG
-# ─────────────────────────────────────────────
-STREAM_WIDTH   = 1280
-STREAM_HEIGHT  = 720
-STREAM_FPS     = 30
-RECORD_FPS     = 2
-JPEG_QUALITY   = 80
-SERVER_PORT    = 5555
-CAMERA_INDEX   = 0
-# ─────────────────────────────────────────────
+#? ---
+#? FIXED CONFIG
+#? Static camera and server configuration values.
+#? ---
 
-# ─────────────────────────────────────────────
-#  TERMINAL BANNER
-# ─────────────────────────────────────────────
+STREAM_WIDTH = 1280
+STREAM_HEIGHT = 720
+STREAM_FPS = 30
+RECORD_FPS = 2
+JPEG_QUALITY = 80
+SERVER_PORT = 5555
+CAMERA_INDEX = 0
+
+#? ---
+#? TERMINAL BANNER
+#? Prints a startup summary to the terminal with environment details and the server URL.
+#? ---
+
+# Prints a formatted startup banner showing environment, paths, and server URL
 def _print_banner():
-    RESET  = "\033[0m"
-    BOLD   = "\033[1m"
-    CYAN   = "\033[96m"
-    GREEN  = "\033[92m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
     YELLOW = "\033[93m"
-    BLUE   = "\033[94m"
-    DIM    = "\033[2m"
+    BLUE = "\033[94m"
+    DIM = "\033[2m"
 
     if _IS_PI:
-        env_colour  = GREEN
+        env_colour = GREEN
         env_details = [
             f"  {DIM}Camera backend :{RESET} V4L2  (native Linux video layer)",
             f"  {DIM}Recordings     :{RESET} {RECORDINGS_DIR}",
@@ -73,14 +83,14 @@ def _print_banner():
             f"  {DIM}Note           :{RESET} Run  v4l2-ctl --list-devices  if camera index fails",
         ]
     elif _IS_MAC:
-        env_colour  = BLUE
+        env_colour = BLUE
         env_details = [
             f"  {DIM}Camera backend :{RESET} AVFoundation  (native macOS)",
             f"  {DIM}Recordings     :{RESET} {RECORDINGS_DIR}",
             f"  {DIM}Screenshots    :{RESET} {SCREENSHOTS_DIR}",
         ]
     else:
-        env_colour  = YELLOW
+        env_colour = YELLOW
         env_details = [
             f"  {DIM}Camera backend :{RESET} V4L2",
             f"  {DIM}Recordings     :{RESET} {RECORDINGS_DIR}",
@@ -88,23 +98,20 @@ def _print_banner():
         ]
 
     width = 62
-    line  = "─" * width
-    print(f"\n{CYAN}{BOLD}  ╔{'═' * (width - 2)}╗{RESET}")
+    line = "-" * width
+    print(f"\n{CYAN}{BOLD}  ╔{'=' * (width - 2)}╗{RESET}")
     print(f"{CYAN}{BOLD}  ║{'Camera Server':^{width - 2}}║{RESET}")
-    print(f"{CYAN}{BOLD}  ╚{'═' * (width - 2)}╝{RESET}")
+    print(f"{CYAN}{BOLD}  ╚{'=' * (width - 2)}╝{RESET}")
     print(f"  {line}")
-    # keep Environment in DIM
     print(f"  {DIM}Environment  :{RESET}  {env_colour}{BOLD}{ENV_NAME}{RESET}")
     print(f"  {line}")
     for detail in env_details:
         print(detail)
     print(f"  {line}")
-    # keep Web UI in DIM
     print(f"  {DIM}Web UI       :{RESET}  {CYAN}http://192.168.4.1:{SERVER_PORT}/{RESET}  (open in your browser)")
     print(f"  {line}\n")
     sys.stdout.flush()
 
-# ─────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -114,34 +121,39 @@ os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 
 app = Flask(__name__)
 
-# ─────────────────────────────────────────────
-#  Shared state
-# ─────────────────────────────────────────────
-_latest_frame      = None
-_frame_lock        = threading.Lock()
+#? ---
+#? SHARED STATE
+#? Threading locks and mutable globals for the camera frame, recording state, and screenshots.
+#? ---
 
-_is_recording      = False
-_video_writer      = None
-_recording_path    = None
-_recording_start   = None
-_recording_fps     = RECORD_FPS
-_state_lock        = threading.Lock()
+_latest_frame = None
+_frame_lock = threading.Lock()
+
+_is_recording = False
+_video_writer = None
+_recording_path = None
+_recording_start = None
+_recording_fps = RECORD_FPS
+_state_lock = threading.Lock()
 
 _rec_frame_interval = max(1, round(STREAM_FPS / RECORD_FPS))
-_rec_frame_counter  = 0
-_rec_frame_lock     = threading.Lock()
+_rec_frame_counter = 0
+_rec_frame_lock = threading.Lock()
 
-_screenshots       = []
-_screenshots_lock  = threading.Lock()
+_screenshots = []
+_screenshots_lock = threading.Lock()
 
-# ─────────────────────────────────────────────
-#  Camera Loop
-# ─────────────────────────────────────────────
+#? ---
+#? CAMERA LOOP
+#? Background thread that reads frames from the camera and writes to the active recording.
+#? ---
+
+# Runs in a background thread - grabs frames, updates the shared frame, and writes to the recorder
 def camera_loop():
     global _latest_frame, _is_recording, _video_writer
     global _rec_frame_counter, _rec_frame_interval
 
-    log.info("Starting OpenCV VideoCapture — index %d, backend: %s", CAMERA_INDEX, ENV_NAME)
+    log.info("Starting OpenCV VideoCapture - index %d, backend: %s", CAMERA_INDEX, ENV_NAME)
     cap = cv2.VideoCapture(CAMERA_INDEX, CAM_BACKEND)
 
     if not cap.isOpened():
@@ -149,13 +161,13 @@ def camera_loop():
         if _IS_PI:
             log.error("Run  v4l2-ctl --list-devices  to confirm the correct index.")
         elif _IS_MAC:
-            log.error("Check System Settings → Privacy & Security → Camera.")
+            log.error("Check System Settings - Privacy & Security - Camera.")
         return
 
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  STREAM_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, STREAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, STREAM_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS,          STREAM_FPS)
+    cap.set(cv2.CAP_PROP_FPS, STREAM_FPS)
 
     actual_w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     actual_h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -190,9 +202,12 @@ def camera_loop():
         cap.release()
         log.info("Camera pipeline stopped.")
 
-# ─────────────────────────────────────────────
-#  MJPEG Stream Generator  (preview only)
-# ─────────────────────────────────────────────
+#? ---
+#? MJPEG STREAM
+#? Yields MJPEG-encoded frames for the browser live preview - does not write to disk.
+#? ---
+
+# Generator that yields MJPEG-encoded frames for the /video_feed route
 def _generate_mjpeg():
     encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
     while True:
@@ -217,21 +232,23 @@ def _generate_mjpeg():
         )
         time.sleep(1.0 / STREAM_FPS)
 
-# ─────────────────────────────────────────────
-#  Internal helpers
-# ─────────────────────────────────────────────
+#? ---
+#? INTERNAL HELPERS
+#? Shared utility for stopping an active recording safely from any thread.
+#? ---
+
+# Stops the active recording and returns (saved_path, size_mb) - thread-safe
 def _do_stop_recording():
-    """Stop the active recording. Returns (saved_path, size_mb). Thread-safe."""
     global _is_recording, _video_writer, _recording_path, _recording_start
     with _state_lock:
         if not _is_recording:
             return None, 0
-        _is_recording    = False
+        _is_recording = False
         _recording_start = None
         if _video_writer:
             _video_writer.release()
             _video_writer = None
-        saved           = _recording_path
+        saved = _recording_path
         _recording_path = None
 
     if saved and os.path.exists(saved):
@@ -240,34 +257,38 @@ def _do_stop_recording():
         return saved, round(size_mb, 2)
     return saved, 0
 
-# ─────────────────────────────────────────────
-#  Flask Routes
-# ─────────────────────────────────────────────
+#? ---
+#? FLASK ROUTES
+#? API and page routes served to the browser UI.
+#? ---
+
+# Serves the main HTML page
 @app.route("/")
 def index():
     return _HTML_PAGE
 
+# Serves the MJPEG camera stream
 @app.route("/video_feed")
 def video_feed():
     return Response(_generate_mjpeg(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
+# Starts a new recording at the requested FPS, optionally stopping automatically after a duration
 @app.route("/start_recording", methods=["POST"])
 def start_recording():
     global _is_recording, _video_writer, _recording_path, _recording_start
     global _recording_fps, _rec_frame_interval, _rec_frame_counter
 
-    body     = request.get_json(force=True, silent=True) or {}
+    body = request.get_json(force=True, silent=True) or {}
     duration = int(body.get("duration", 0))
-    req_fps  = int(body.get("fps", RECORD_FPS))
-    req_fps  = max(1, min(req_fps, STREAM_FPS))
+    req_fps = int(body.get("fps", RECORD_FPS))
+    req_fps = max(1, min(req_fps, STREAM_FPS))
 
     with _state_lock:
         if _is_recording:
             return jsonify({"status": "already_recording", "file": _recording_path})
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Embed fps in filename
-        path   = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}_{req_fps}fps.avi")
+        path = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}_{req_fps}fps.avi")
         fourcc = cv2.VideoWriter_fourcc(*"MJPG")
         _video_writer = cv2.VideoWriter(
             path, fourcc, req_fps,
@@ -279,15 +300,14 @@ def start_recording():
             _video_writer = None
             return jsonify({"status": "error", "message": "Failed to create video file."})
 
-        _recording_path  = path
-        _is_recording    = True
+        _recording_path = path
+        _is_recording = True
         _recording_start = time.time()
-        _recording_fps   = req_fps
+        _recording_fps = req_fps
 
-    # Update sub-sampling interval for the chosen fps
     with _rec_frame_lock:
         _rec_frame_interval = max(1, round(STREAM_FPS / req_fps))
-        _rec_frame_counter  = 0
+        _rec_frame_counter = 0
 
     log.info("Recording started -> %s  (%d fps)%s", path, req_fps,
              f"  auto-stop in {duration}s" if duration else "")
@@ -300,6 +320,7 @@ def start_recording():
 
     return jsonify({"status": "started", "file": path, "duration": duration, "fps": req_fps})
 
+# Stops the current recording and returns the saved file path and size
 @app.route("/stop_recording", methods=["POST"])
 def stop_recording():
     saved, size_mb = _do_stop_recording()
@@ -307,6 +328,7 @@ def stop_recording():
         return jsonify({"status": "stopped", "saved_to": saved, "size_mb": size_mb})
     return jsonify({"status": "not_recording"})
 
+# Captures a single JPEG screenshot from the current frame and saves it to disk
 @app.route("/take_screenshot", methods=["POST"])
 def take_screenshot():
     with _frame_lock:
@@ -316,8 +338,8 @@ def take_screenshot():
         return jsonify({"status": "error", "message": "No frame available yet."})
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename  = f"screenshot_{timestamp}.jpg"
-    path      = os.path.join(SCREENSHOTS_DIR, filename)
+    filename = f"screenshot_{timestamp}.jpg"
+    path = os.path.join(SCREENSHOTS_DIR, filename)
 
     ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
     if not ok:
@@ -327,10 +349,10 @@ def take_screenshot():
         f.write(buf.tobytes())
 
     thumb = frame.copy()
-    h, w  = thumb.shape[:2]
+    h, w = thumb.shape[:2]
     scale = min(1.0, 240 / w)
     thumb = cv2.resize(thumb, (int(w * scale), int(h * scale)))
-    _, tbuf   = cv2.imencode(".jpg", thumb, [cv2.IMWRITE_JPEG_QUALITY, 75])
+    _, tbuf = cv2.imencode(".jpg", thumb, [cv2.IMWRITE_JPEG_QUALITY, 75])
     thumb_b64 = base64.b64encode(tbuf.tobytes()).decode("utf-8")
 
     entry = {"filename": filename, "path": path, "thumb_b64": thumb_b64}
@@ -340,9 +362,10 @@ def take_screenshot():
     log.info("Screenshot saved -> %s", path)
     return jsonify({"status": "ok", "filename": filename, "thumb_b64": thumb_b64})
 
+# Renames a saved screenshot file on disk and updates the in-memory list
 @app.route("/rename_screenshot", methods=["POST"])
 def rename_screenshot():
-    data     = request.get_json(force=True)
+    data = request.get_json(force=True)
     old_name = os.path.basename(data.get("old_name", "").strip())
     new_name = os.path.basename(data.get("new_name", "").strip())
 
@@ -364,35 +387,33 @@ def rename_screenshot():
         for entry in _screenshots:
             if entry["filename"] == old_name:
                 entry["filename"] = new_name
-                entry["path"]     = new_path
+                entry["path"] = new_path
                 break
 
     log.info("Screenshot renamed: %s -> %s", old_name, new_name)
     return jsonify({"status": "ok", "new_name": new_name})
 
+# Returns the current server configuration as JSON
 @app.route("/config")
 def config():
     return jsonify({
-        "env":             ENV_NAME,
-        "recordings_dir":  RECORDINGS_DIR,
+        "env": ENV_NAME,
+        "recordings_dir": RECORDINGS_DIR,
         "screenshots_dir": SCREENSHOTS_DIR,
-        "record_fps":      RECORD_FPS,
-        "stream_fps":      STREAM_FPS,
+        "record_fps": RECORD_FPS,
+        "stream_fps": STREAM_FPS,
     })
 
+# Returns recording status, elapsed time, recent recordings list, and screenshots
 @app.route("/status")
 def status():
     with _state_lock:
-        recording   = _is_recording
-        path        = _recording_path
-        started     = _recording_start
+        recording = _is_recording
+        path = _recording_path
+        started = _recording_start
         current_fps = _recording_fps
 
-    elapsed_s   = round(time.time() - started, 1) if (recording and started) else 0
-    # Rough: MJPEG @ 640×480 ≈ 40 KB/frame
-    # 115 KB/frame derived from real measurements at 1280×720 MJPG quality 80:
-    #   68s×5fps=340f→32.4MB (~95KB/f), 26s×2fps=52f→6.4MB (~123KB/f),
-    #   10s×10fps=100f→12.8MB (~128KB/f)  → average ≈ 115 KB/frame
+    elapsed_s = round(time.time() - started, 1) if (recording and started) else 0
     est_size_mb = round(elapsed_s * current_fps * 115 / 1024, 2) if elapsed_s else 0
 
     recordings = []
@@ -410,7 +431,7 @@ def status():
                 parts = fname.replace("recording_", "").replace(".avi", "")
                 if parts.endswith("fps"):
                     parts = "_".join(parts.split("_")[:-1])
-                dt   = datetime.strptime(parts, "%Y%m%d_%H%M%S")
+                dt = datetime.strptime(parts, "%Y%m%d_%H%M%S")
                 when = dt.strftime("%Y-%m-%d  %H:%M:%S")
             except Exception:
                 when = ""
@@ -423,18 +444,20 @@ def status():
                  for s in _screenshots]
 
     return jsonify({
-        "recording":    recording,
-        "file":         path,
-        "elapsed_s":    elapsed_s,
-        "est_size_mb":  est_size_mb,
-        "current_fps":  current_fps,
-        "recordings":   recordings,
-        "screenshots":  shots,
+        "recording": recording,
+        "file": path,
+        "elapsed_s": elapsed_s,
+        "est_size_mb": est_size_mb,
+        "current_fps": current_fps,
+        "recordings": recordings,
+        "screenshots": shots,
     })
 
-# ─────────────────────────────────────────────
-#  HTML Page
-# ─────────────────────────────────────────────
+#? ---
+#? HTML PAGE
+#? Single-file browser UI served at the root route.
+#? ---
+
 _HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -465,7 +488,7 @@ _HTML_PAGE = """<!DOCTYPE html>
     text-align: center;
   }
 
-  /* ── Desktop: side-by-side; Mobile: stacked ── */
+  /* -- Desktop: side-by-side; Mobile: stacked -- */
   #layout {
     display: flex;
     gap: 16px;
@@ -529,7 +552,7 @@ _HTML_PAGE = """<!DOCTYPE html>
   }
   @keyframes blink { 50% { opacity: 0.3; } }
 
-  /* ── FPS selector ── */
+  /* -- FPS selector -- */
   #fps-row {
     display: flex;
     gap: 8px;
@@ -562,7 +585,7 @@ _HTML_PAGE = """<!DOCTYPE html>
     color: #888;
   }
 
-  /* ── Controls ── */
+  /* -- Controls -- */
   #controls {
     display: flex;
     gap: 10px;
@@ -868,7 +891,7 @@ _HTML_PAGE = """<!DOCTYPE html>
   });
   fpsHint.textContent = fpsHints[fpsSelect.value] || '';
 
-  // ── Elapsed timer ──
+  // -- Elapsed timer --
   let _recStartEpoch = null;
   let _elapsedTimer  = null;
   let _timedDuration = 0;
@@ -910,7 +933,7 @@ _HTML_PAGE = """<!DOCTYPE html>
     recOverlay.style.display = 'none';
   }
 
-  // ── UI state: enable/disable buttons based on recording status ──
+  // -- UI state: enable/disable buttons based on recording status --
   function setRecordingUI(active) {
     recBadge.style.display   = active ? 'block' : 'none';
     recOverlay.style.display = active ? 'block' : 'none';
@@ -955,7 +978,7 @@ _HTML_PAGE = """<!DOCTYPE html>
     refreshStatus();
   }
 
-  // ── Screenshot ──
+  // -- Screenshot --
   let lbCurrentName = '';
 
   function openLightbox(thumb_b64, filename) {
@@ -1022,7 +1045,7 @@ _HTML_PAGE = """<!DOCTYPE html>
     shotList.prepend(card);
   }
 
-  // ── Status polling ──
+  // -- Status polling --
   async function refreshStatus() {
     try {
       const r = await fetch('/status');
@@ -1090,11 +1113,10 @@ _HTML_PAGE = """<!DOCTYPE html>
 </html>
 """
 
-
 if __name__ == "__main__":
-  _print_banner()
-  cam_thread = threading.Thread(target=camera_loop, daemon=True, name="camera")
-  cam_thread.start()
-  time.sleep(2)
-  log.info("Server starting on http://0.0.0.0:%d", SERVER_PORT)
-  app.run(host="0.0.0.0", port=SERVER_PORT, threaded=True, use_reloader=False)
+    _print_banner()
+    cam_thread = threading.Thread(target=camera_loop, daemon=True, name="camera")
+    cam_thread.start()
+    time.sleep(2)
+    log.info("Server starting on http://0.0.0.0:%d", SERVER_PORT)
+    app.run(host="0.0.0.0", port=SERVER_PORT, threaded=True, use_reloader=False)

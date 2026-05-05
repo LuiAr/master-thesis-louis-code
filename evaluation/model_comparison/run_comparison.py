@@ -19,26 +19,15 @@ OLLAMA_URL = "http://localhost:11434"
 
 # Full candidate list — the script automatically detects which ones are installed in Ollama
 # and only runs those. Pull any model with: ollama pull <name>
-# Expected runtime RAM and latency on Apple Silicon (Q4):
-#   gemma3:4b                           ~4-5 GB   1-2s   fast, perfect format compliance
-#   richardyoung/smolvlm2-2.2b-instruct ~4 GB     1-3s   edge-optimised, untested
-#   llava-phi3                          ~4-5 GB   2-4s   LLaVA on Phi-3 Mini, untested
-#   llava:7b                            ~5-6 GB   1-2s   good but uses uppercase tokens
-#
-# Removed after first benchmark run:
-#   qwen3-vl:2b        — empty responses and 35s+ latency on some images, unreliable
-#   granite3.2-vision  — ignores token constraints, writes "human" instead of "person",
-#                        puts free-text explanations inside structured fields
-#   moondream          — kept for reference only, cannot follow key:value format reliably
 CANDIDATE_MODELS = [
     "gemma3:4b",
     # "richardyoung/smolvlm2-2.2b-instruct",
     "llava-phi3",
     "gemma4:e2b",
     # "llava:7b",
-    # "moondream",             # too weak on structured output, kept for latency reference only
-    # "qwen3-vl:2b",           # empty responses and 35s+ on some images
-    # "granite3.2-vision:2b",  # cannot follow token format, uses "human" instead of "person"
+    # "moondream",
+    # "qwen3-vl:2b",
+    # "granite3.2-vision:2b",
 ]
 
 # Images to test — paths relative to the evaluation/ folder

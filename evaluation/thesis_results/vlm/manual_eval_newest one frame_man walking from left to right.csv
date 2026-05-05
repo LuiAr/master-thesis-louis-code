@@ -1,0 +1,13 @@
+frame_index,video_timestamp_s,source,action,obstacle_type,movement,confidence,reasoning,correct,note
+0,0.0,vlm,STOP,person,moving,high,"the person is moving directly towards the mower's path, posing a significant safety risk.",True,
+5,0.502,vlm,CONTINUE,person,stationary,high,the person is stationary and not moving towards the mower's path.,False,
+10,1.003,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",True,
+15,1.505,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",True,
+20,2.007,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",True,
+25,2.508,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",True,
+30,3.01,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential hazard.",True,
+40,4.014,vlm,STOP,person,moving,high,"The person is moving towards the mower, posing a potential safety risk.",True,
+45,4.515,vlm,TURN_LEFT,person,stationary,high,"The person is stationary, so a turn is the appropriate action.",False,
+50,5.017,vlm,STOP,person,stationary,high,"the person is standing close to the mower's path and is facing the mower, posing a potential threat.",False,
+55,5.519,vlm,STOP,person,stationary,high,the person is standing close to the mower's path and could potentially enter it.,False,
+60,6.02,vlm,STOP,person,stationary,high,a person is standing close to the mower's path and is facing the mower.,False,

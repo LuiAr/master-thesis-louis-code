@@ -1,0 +1,13 @@
+frame_index,video_timestamp_s,source,action,obstacle_type,movement,confidence,reasoning,correct,note
+0,0.0,seg,,,,,,True,
+5,0.5,seg,,,,,,True,
+10,1.0,seg,,,,,,True,
+15,1.5,seg,,,,,,True,
+20,2.0,seg,,,,,,True,
+25,2.5,seg,,,,,,True,
+30,3.0,seg,,,,,,True,
+35,3.5,seg,,,,,,True,
+40,4.0,seg,,,,,,True,
+45,4.5,seg,,,,,,True,
+50,5.0,seg,,,,,,True,
+55,5.5,seg,,,,,,True,

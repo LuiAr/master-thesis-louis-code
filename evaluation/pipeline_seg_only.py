@@ -23,11 +23,13 @@ import tty
 #? Set IMAGE_PATH for a single image or VIDEO_PATH for a video — leave both empty to get the selector.
 #? ---
 
-IMAGE_PATH = "recordings/images/Generated Image April 08, 2026 - 2_51PM.jpg"  # path to a single image file (.jpg / .png / etc.)
-VIDEO_PATH = ""  # path to a video file — leave empty to pick from the recordings folder
-RUN_NAME = ""  # name for the output folder — leave empty for auto timestamp
-FRAME_EVERY = 0  # video only: frames to skip between samples — 0 uses FRAME_SAMPLE_EVERY from config.py
-SAVE_ANNOTATED = True  # set to False to skip saving annotated frames (faster)
+IMAGE_PATH = ""
+VIDEO_PATH = ""
+RUN_NAME = ""
+# video only: frames to skip between samples — 0 uses FRAME_SAMPLE_EVERY from config.py
+FRAME_EVERY = 0
+# set to False to skip saving annotated frames (faster)
+SAVE_ANNOTATED = True
 
 #? ---
 #? LOGGING
@@ -47,17 +49,33 @@ logger = logging.getLogger(__name__)
 #? Routes to image mode or video mode depending on which path is set.
 #? ---
 
-# Entry point — runs image mode if IMAGE_PATH is set, otherwise video mode
+# Prompts the user to enter a run name, falls back to a timestamp if left empty
+def _prompt_run_name():
+    name = input("Enter a name for this run (leave blank for auto timestamp): ").strip()
+    if not name:
+        name = f"seg_only_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        print(f"Using auto name: {name}")
+    print("")
+    return name
+
+# Entry point — runs image mode if IMAGE_PATH is set, otherwise asks the user to pick a mode
 def main():
     if IMAGE_PATH:
         print("-------------------------------")
         print("---- RUNNING ON IMAGE MODE ----")
         print("-------------------------------")
         _run_image()
+        return
+    print("-------------------------------")
+    print("---- RUNNING ON VIDEO MODE ----")
+    print("-------------------------------")
+    mode, files, prefix = _select_run_mode()
+    if mode == "all":
+        for f in files:
+            run_name = f"{prefix}_{f.stem}" if prefix else f.stem
+            print(f"\nProcessing: {f.name}")
+            _run_video(video_path_override=str(f), run_name_override=run_name)
     else:
-        print("-------------------------------")
-        print("---- RUNNING ON VIDEO MODE ----")
-        print("-------------------------------")
         _run_video()
 
 
@@ -79,7 +97,7 @@ def _run_image():
         sys.exit(1)
 
     height, width = frame.shape[:2]
-    run_name = RUN_NAME or f"seg_only_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_name = RUN_NAME or _prompt_run_name()
     run_dir, frames_dir, annotated_dir, logs_dir = _make_run_dirs(run_name)
 
     seg_utils.load_seg_model()
@@ -122,18 +140,21 @@ def _run_image():
 #? Processes a video file frame by frame — same selector and loop as before.
 #? ---
 
-# Runs the segmentation pipeline on a video file, with interactive file selector if VIDEO_PATH is empty
-def _run_video():
+# Runs the segmentation pipeline on a video file; uses selector and name prompt if no overrides given
+def _run_video(video_path_override=None, run_name_override=None):
     global VIDEO_PATH
-    if not VIDEO_PATH:
-        VIDEO_PATH = _pick_video_file()
+    if video_path_override:
+        video_path = Path(video_path_override).expanduser().resolve()
+    else:
+        if not VIDEO_PATH:
+            VIDEO_PATH = _pick_video_file()
+        video_path = Path(VIDEO_PATH).expanduser().resolve()
 
-    video_path = Path(VIDEO_PATH).expanduser().resolve()
     if not video_path.exists():
         logger.error("Video file not found: %s", video_path)
         sys.exit(1)
 
-    run_name = RUN_NAME or f"seg_only_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_name = run_name_override or RUN_NAME or _prompt_run_name()
     run_dir, frames_dir, annotated_dir, logs_dir = _make_run_dirs(run_name)
 
     every = FRAME_EVERY or config.FRAME_SAMPLE_EVERY
@@ -264,7 +285,7 @@ def _process_frame(frame: np.ndarray, frame_idx: int, video_ts: float, frames_di
 
 # Creates and returns the four run output directories
 def _make_run_dirs(run_name: str):
-    run_dir = Path(config.RUNS_DIR) / run_name
+    run_dir = Path(config.RUNS_DIR_SEG_ONLY) / run_name
     frames_dir = run_dir / "frames"
     annotated_dir = run_dir / "annotated"
     logs_dir = run_dir / "logs"
@@ -280,19 +301,40 @@ def _draw_timestamp(frame: np.ndarray, video_ts: float, frame_idx: int):
     cv2.putText(frame, text, (10, frame.shape[0] - 12),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
 
-# Shows an interactive terminal selector and returns the chosen video path as a string
-def _pick_video_file():
-    d_path = Path(__file__).parent / "recordings" / "first_tests_inside"
+# Returns a sorted list of video files from outside_data_collection
+def _list_video_files():
+    d_path = Path(__file__).parent / "recordings" / "outside_data_collection"
     if not d_path.exists():
         logger.error("Folder not found: %s", d_path)
         sys.exit(1)
-
     files = sorted([f for f in d_path.iterdir()
                     if f.is_file() and f.suffix.lower() in ('.mp4', '.avi', '.mkv', '.mov')])
     if not files:
         logger.error("No video files found in %s", d_path)
         sys.exit(1)
+    return files
 
+# Lists available videos then asks the user to process all or pick one; returns (mode, files, prefix)
+def _select_run_mode():
+    files = _list_video_files()
+    print("\nAvailable videos:")
+    for i, f in enumerate(files):
+        print(f"  {i + 1}) {f.name}")
+    print("")
+    while True:
+        choice = input("Process [all] videos or [pick] one? ").strip().lower()
+        if choice in ("all", "pick"):
+            break
+        print("Please enter 'all' or 'pick'.")
+    if choice == "all":
+        prefix = input("Enter a keyword prefix for the run names: ").strip()
+        print("")
+        return "all", files, prefix
+    return "pick", files, ""
+
+# Shows an interactive terminal selector and returns the chosen video path as a string
+def _pick_video_file():
+    files = _list_video_files()
     options = []
     for f in files:
         dt = datetime.fromtimestamp(f.stat().st_mtime)
